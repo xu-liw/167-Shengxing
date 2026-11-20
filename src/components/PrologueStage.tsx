@@ -77,7 +77,20 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
             className="animate-prologue-line text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.26em] text-[#FFBA84] self-center"
             style={{ animationDelay: '2.5s' }}
           >
-            這次，讓我們一起回到那一天晚上⋯⋯
+            這次，讓我們一起回到那一天晚上
+            <span className="sr-only">……</span>
+            <span
+              aria-hidden="true"
+              className="inline-flex flex-col items-center justify-center gap-[4px] sm:gap-[5px] align-middle mt-1.5"
+              style={{ writingMode: 'horizontal-tb' }}
+            >
+              {[0, 1, 2, 3, 4, 5].map((dot) => (
+                <span
+                  key={dot}
+                  className="block w-[2.5px] h-[2.5px] sm:w-[3px] sm:h-[3px] rounded-full bg-current"
+                />
+              ))}
+            </span>
           </p>
 
           {/* Line 3 (Leftmost focal title) */}

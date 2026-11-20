@@ -29,13 +29,13 @@ interface InteractiveMapProps {
 const ROUTE_LENGTH_LANDSCAPE = 2600;
 const ROUTE_LENGTH_PORTRAIT = 2200;
 
-// 5 station milestones along normalized progress t ∈ [0, 1] for track nodes & altimeter interpolation
+// 5 station milestones along normalized progress t ∈ [0, 1] with distances from Sanyi (km)
 const ROUTE_MILESTONES = [
-  { t: 0.0, elevation: 302.0, label: '三義車站' },
-  { t: 0.36, elevation: 402.326, label: '勝興車站' },
-  { t: 0.7, elevation: 266.8, label: '泰安車站' },
-  { t: 0.86, elevation: 212.0, label: '后里車站' },
-  { t: 1.0, elevation: 215.0, label: '豐原車站' },
+  { t: 0.0, distanceKm: 0.0, label: '三義車站' },
+  { t: 0.36, distanceKm: 5.0, label: '勝興車站' },
+  { t: 0.7, distanceKm: 10.9, label: '泰安車站' },
+  { t: 0.86, distanceKm: 13.5, label: '后里車站' },
+  { t: 1.0, distanceKm: 20.2, label: '豐原車站' },
 ] as const;
 
 /**
@@ -48,21 +48,22 @@ function getTrackCrossPercent(t: number): number {
   return 50 + Math.sin(clamped * Math.PI * 2) * 3.5 * Math.sin(clamped * Math.PI);
 }
 
-/** Smoothly interpolate elevation along the 5 station milestones */
-function getElevationAtProgress(t: number): number {
+/** Smoothly interpolate distance from Sanyi (km) along the 5 station milestones */
+function getDistanceKmAtProgress(t: number): number {
   const clamped = Math.max(0, Math.min(1, t));
-  // Snap cleanly to 402.326m right around Shengxing summit
-  if (Math.abs(clamped - 0.36) < 0.015) return 402.326;
+  for (const m of ROUTE_MILESTONES) {
+    if (Math.abs(clamped - m.t) < 0.008) return m.distanceKm;
+  }
 
   for (let i = 0; i < ROUTE_MILESTONES.length - 1; i++) {
     const a = ROUTE_MILESTONES[i];
     const b = ROUTE_MILESTONES[i + 1];
     if (clamped >= a.t && clamped <= b.t) {
       const ratio = (clamped - a.t) / (b.t - a.t);
-      return a.elevation + (b.elevation - a.elevation) * ratio;
+      return a.distanceKm + (b.distanceKm - a.distanceKm) * ratio;
     }
   }
-  return ROUTE_MILESTONES[ROUTE_MILESTONES.length - 1].elevation;
+  return ROUTE_MILESTONES[ROUTE_MILESTONES.length - 1].distanceKm;
 }
 
 export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
@@ -100,9 +101,8 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
   // Auto-resolved map background texture (supports bg_map_texture.jpg or .png)
   const { resolvedUrl: bgTextureUrl } = useResolvedImage(PUBLIC_ASSETS.images.bgMapTexture);
 
-  // Dynamic Altitude Meter state
-  const [currentElevation, setCurrentElevation] = useState<number>(402.326);
-  const [currentNearestName, setCurrentNearestName] = useState<string>('勝興車站');
+  // Dynamic Distance-from-Sanyi Meter state (km)
+  const [currentDistanceKm, setCurrentDistanceKm] = useState<number>(5.0);
 
   // Dynamic Block Section tracking state
   const [currentSectionIndex, setCurrentSectionIndex] = useState<number>(1);
@@ -180,8 +180,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
       }
 
       setScrollProgress(shengxingT);
-      setCurrentElevation(402.326);
-      setCurrentNearestName('勝興車站');
+      setCurrentDistanceKm(5.0);
       prevSectionIndexRef.current = 1;
       setCurrentSectionIndex(1);
     },
@@ -223,7 +222,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [isLandscape]);
 
-  // Dynamic Train Tracking, Altitude Meter & Block Section via scroll
+  // Dynamic Train Tracking, Distance Meter & Block Section via scroll
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -235,19 +234,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
     const percent = clampedT * 100;
 
     setScrollProgress(clampedT);
-    setCurrentElevation(getElevationAtProgress(clampedT));
-
-    // Find nearest station exclusively among the 5 stations along the route
-    let closestStation: (typeof ROUTE_MILESTONES)[number] = ROUTE_MILESTONES[0];
-    let minDiff = Infinity;
-    for (const station of ROUTE_MILESTONES) {
-      const diff = Math.abs(station.t - clampedT);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestStation = station;
-      }
-    }
-    setCurrentNearestName(closestStation.label);
+    setCurrentDistanceKm(getDistanceKmAtProgress(clampedT));
 
     // Track Block Section dynamically & ring block bell on section transition
     const matchedSecIdx = BLOCK_SECTIONS.findIndex((sec) => {
@@ -262,7 +249,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
         soundEngine.playBlockBell();
       }
     }
-  }, [isLandscape, objects]);
+  }, [isLandscape]);
 
   // Desktop click-and-drag panning on map background
   const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -904,39 +891,33 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
         </div>
       </div>
 
-      {/* ================= CORNER 1: DYNAMIC ALTIMETER (貼齊視窗左側 · 海拔高度) ================= */}
+      {/* ================= CORNER 1: DYNAMIC DISTANCE METER (貼齊視窗左側 · 距起點三義) ================= */}
       <div
         className={`absolute left-0 z-30 flex flex-col justify-between overflow-hidden bg-[#0C0C0C]/90 backdrop-blur-md border border-l-0 border-[#FFBA84]/35 shadow-2xl text-[#FCFAF2] ${
           isLandscape
-            ? 'bottom-5 w-[172px] h-[94px] px-3 py-2.5'
-            : 'bottom-14 w-[124px] h-[80px] px-2.5 py-2'
+            ? 'bottom-5 w-[108px] h-[56px] px-2.5 py-2'
+            : 'bottom-14 w-[96px] h-[50px] px-2 py-1.5'
         }`}
       >
-        <div className="text-[10px] leading-none tracking-[0.18em] text-[#FFBA84] border-b border-[#FCFAF2]/15 pb-1">
-          <span>海拔高度</span>
+        <div className="text-[10px] leading-none tracking-[0.1em] text-[#FFBA84] border-b border-[#FCFAF2]/15 pb-1 whitespace-nowrap">
+          <span>距起點三義：</span>
         </div>
 
-        <div className="flex items-baseline gap-1 leading-none">
+        <div className="flex items-baseline gap-1 leading-none whitespace-nowrap">
           <span
             className={`font-mono tabular-nums font-semibold tracking-tight text-[#FFBA84] ${
-              isLandscape ? 'text-xl' : 'text-[15px]'
+              isLandscape ? 'text-xl' : 'text-base'
             }`}
           >
-            {currentElevation === 402.326
-              ? '402.326'
-              : currentElevation.toFixed(1)}
+            {currentDistanceKm.toFixed(1)}
           </span>
           <span
             className={`font-mono text-[#FCFAF2]/70 ${
               isLandscape ? 'text-[11px]' : 'text-[10px]'
             }`}
           >
-            公尺
+            公里
           </span>
-        </div>
-
-        <div className="pt-1 border-t border-[#FCFAF2]/10 text-[10px] leading-none text-[#FCFAF2]/75">
-          <span className="block truncate">鄰近：{currentNearestName}</span>
         </div>
       </div>
 
