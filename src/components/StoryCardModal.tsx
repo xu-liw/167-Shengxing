@@ -1,0 +1,140 @@
+import { useEffect } from 'react';
+import { BookOpen, Footprints, MapPin, X } from 'lucide-react';
+import { MapObject } from '../data/exhibitionData';
+import { ResilientImage } from './ResilientImage';
+
+interface StoryCardModalProps {
+  object: MapObject | null;
+  onClose: () => void;
+}
+
+export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
+  useEffect(() => {
+    if (!object) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [object, onClose]);
+
+  if (!object) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="story-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#0C0C0C]/80 backdrop-blur-xs animate-stage-fade-in"
+      onClick={onClose}
+    >
+      {/* #FFBA84 Warm Apricot Framed Card Modal */}
+      <div
+        className="relative bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-2xl max-h-[92vh] overflow-y-auto border-3 border-[#FFBA84] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top Apricot & Juguang Dual Accent Stripe */}
+        <div className="h-2.5 bg-[#FFBA84]" />
+        <div className="h-1 bg-[#F05E1C]" />
+
+        {/* Modal Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="關閉故事視窗"
+          className="absolute top-5 right-5 z-20 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2]/90 hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/15 cursor-pointer"
+        >
+          <X className="w-5 h-5" aria-hidden="true" />
+        </button>
+
+        <div className="p-6 sm:p-8">
+          {/* Top Milestones / Elevation Badges */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-[#0C0C0C]/70 pb-3 border-b border-[#0C0C0C]/15">
+            <span className="text-[#F05E1C] font-semibold">{object.kmMark}</span>
+            <span aria-hidden="true" className="text-[#0C0C0C]/30">·</span>
+            <span>海拔 {object.elevationStr}</span>
+            <span aria-hidden="true" className="text-[#0C0C0C]/30">·</span>
+            <span className="font-serif text-[#0B346E]">舊山線文史導覽</span>
+          </div>
+
+          {/* Title */}
+          <h2
+            id="story-modal-title"
+            className="mt-3 text-2xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
+          >
+            {object.name}
+          </h2>
+
+          {/* 4:3 Image Container with Resilient Fallback */}
+          <div className="mt-5 aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18] shadow-sm relative">
+            <ResilientImage
+              src={object.image || ''}
+              alt={object.imageAlt || object.name}
+              className="w-full h-full object-cover"
+              fallbackTitle={object.name}
+              fallbackSubtitle={`舊山線 · ${object.elevationStr}`}
+            />
+            {/* Subtle vintage photo corner vignette */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0C0C0C]/60 via-transparent to-transparent"
+            />
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] text-[#FCFAF2]/90 font-mono">
+              <span>{object.kmMark}</span>
+              <span className="text-[#FFBA84] font-serif">{object.shortName}</span>
+            </div>
+          </div>
+
+          {/* Story Narrative (故事內文) */}
+          <div className="mt-6 space-y-3.5">
+            <p className="text-base sm:text-[17px] font-medium leading-[1.8] text-[#0C0C0C]">
+              {object.summary}
+            </p>
+            <p className="text-sm sm:text-base leading-[1.9] text-[#0C0C0C]/85">
+              {object.story || object.detail}
+            </p>
+          </div>
+
+          {/* Modern Walking Tip (現代散步提示) */}
+          {object.walkingTip && (
+            <div className="mt-6 p-4 bg-[#FFBA84]/15 border-l-3 border-[#F05E1C] rounded-none">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-[#F05E1C]">
+                <Footprints className="w-4 h-4" aria-hidden="true" />
+                <span>現代散步提示 · 現場走讀筆記</span>
+              </div>
+              <p className="mt-2 text-xs sm:text-sm leading-[1.8] text-[#0C0C0C]/85">
+                {object.walkingTip}
+              </p>
+            </div>
+          )}
+
+          {/* Source / Citation (資料來源) */}
+          {object.source && (
+            <div className="mt-6 pt-4 border-t border-[#0C0C0C]/15 flex items-start gap-2 text-xs text-[#0C0C0C]/60">
+              <BookOpen className="w-3.5 h-3.5 text-[#F05E1C] shrink-0 mt-0.5" aria-hidden="true" />
+              <p className="leading-relaxed">
+                <span className="text-[#0C0C0C]/80 font-medium">資料來源：</span>
+                {object.source}
+              </p>
+            </div>
+          )}
+
+          {/* Bottom Action Footer */}
+          <div className="mt-6 pt-4 border-t border-[#0C0C0C]/10 flex items-center justify-between text-xs">
+            <span className="text-[#0C0C0C]/50 flex items-center gap-1 font-mono">
+              <MapPin className="w-3 h-3 text-[#F05E1C]" aria-hidden="true" />
+              <span>苗栗與台中界嶺舊鐵道</span>
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-[38px] px-5 py-1.5 bg-[#0C0C0C] text-[#FCFAF2] hover:bg-[#F05E1C] transition-colors cursor-pointer tracking-[0.1em]"
+            >
+              返回地圖
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

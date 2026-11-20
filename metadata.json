@@ -1,0 +1,6 @@
+{
+  "name": "勝興：21:10｜舊山線地方主題線上策展",
+  "description": "1998 年 9 月 23 日 21:10，莒光 167 次南下列車最後一次停靠勝興車站。透過線上策展重返舊山線的歷史夜色與鐵道記憶。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
