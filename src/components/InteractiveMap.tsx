@@ -23,6 +23,11 @@ import { TicketDaterModal } from './TicketDaterModal';
 
 interface InteractiveMapProps {
   onSelectStation?: (stationId: string) => void;
+  hasTicket?: boolean;
+  onOpenTicketMachine?: () => void;
+  activeModalId?: string | null;
+  onOpenModal?: (modalId: string) => void;
+  onCloseModal?: () => void;
 }
 
 // Active scrollable railway length from Sanyi (0%) to Fengyuan (100%)
@@ -66,7 +71,14 @@ function getDistanceKmAtProgress(t: number): number {
   return ROUTE_MILESTONES[ROUTE_MILESTONES.length - 1].distanceKm;
 }
 
-export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
+export function InteractiveMap({
+  onSelectStation,
+  hasTicket = true,
+  onOpenTicketMachine,
+  activeModalId = null,
+  onOpenModal,
+  onCloseModal,
+}: InteractiveMapProps) {
   // 11 map-placed clickable objects (can be fine-tuned via drag in Debug mode)
   const [objects, setObjects] = useState<MapObject[]>(() =>
     JSON.parse(JSON.stringify(MAP_OBJECTS))
@@ -94,9 +106,36 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  // Modals (all 13 items open StoryCardModal or TicketDaterModal)
-  const [activeStoryObject, setActiveStoryObject] = useState<MapObject | null>(null);
-  const [isDaterOpen, setIsDaterOpen] = useState(false);
+  // Local fallback modal state if used standalone; otherwise controlled via browser history
+  const [localModalId, setLocalModalId] = useState<string | null>(null);
+  const resolvedModalId = onOpenModal ? activeModalId : localModalId;
+
+  const openModalById = useCallback(
+    (id: string) => {
+      if (onOpenModal) {
+        onOpenModal(id);
+      } else {
+        setLocalModalId(id);
+      }
+    },
+    [onOpenModal]
+  );
+
+  const closeActiveModal = useCallback(() => {
+    if (onCloseModal) {
+      onCloseModal();
+    } else {
+      setLocalModalId(null);
+    }
+  }, [onCloseModal]);
+
+  const isDaterOpen = resolvedModalId === 'dater-machine';
+  const activeStoryObject: MapObject | null = useMemo(() => {
+    if (!resolvedModalId || resolvedModalId === 'dater-machine') return null;
+    if (resolvedModalId === TRAIN_167_OBJECT.id) return TRAIN_167_OBJECT;
+    if (resolvedModalId === BLOCK_INSTRUMENT_DATA.id) return BLOCK_INSTRUMENT_DATA;
+    return objects.find((item) => item.id === resolvedModalId) ?? null;
+  }, [resolvedModalId, objects]);
 
   // Auto-resolved map background texture (supports bg_map_texture.jpg or .png)
   const { resolvedUrl: bgTextureUrl } = useResolvedImage(PUBLIC_ASSETS.images.bgMapTexture);
@@ -306,9 +345,9 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
         setIsDebugMode((prev) => !prev);
         soundEngine.playSelectClick();
       } else if (e.key === 'Escape') {
-        if (activeStoryObject) setActiveStoryObject(null);
-        if (isDaterOpen) setIsDaterOpen(false);
-        if (isDebugMode) setIsDebugMode(false);
+        if (isDebugMode && !activeStoryObject && !isDaterOpen) {
+          setIsDebugMode(false);
+        }
       }
     };
 
@@ -380,7 +419,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
   // Click on centered train head: play whistle sound & open ⑫ 莒光號列車正面 modal
   const handleTrainClick = () => {
     soundEngine.playTrainWhistle();
-    setActiveStoryObject(TRAIN_167_OBJECT);
+    openModalById(TRAIN_167_OBJECT.id);
   };
 
   // Compute exact pixel-coordinate SVG paths for the main track + faded north/south extensions
@@ -725,12 +764,8 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
                   onClick={() => {
                     if (isDebugMode) return;
                     soundEngine.playSelectClick();
-                    if (isDater) {
-                      setIsDaterOpen(true);
-                    } else {
-                      setActiveStoryObject(obj);
-                      if (onSelectStation) onSelectStation(obj.id);
-                    }
+                    openModalById(obj.id);
+                    if (!isDater && onSelectStation) onSelectStation(obj.id);
                   }}
                   className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-150 ${
                     isDebugMode
@@ -926,7 +961,7 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
         type="button"
         onClick={() => {
           soundEngine.playSelectClick();
-          setActiveStoryObject(BLOCK_INSTRUMENT_DATA);
+          openModalById(BLOCK_INSTRUMENT_DATA.id);
         }}
         aria-label={`電氣路牌閉塞器（${
           activeBlockSection.status === 'occupied' ? '列車佔用' : '區間開通'
@@ -968,13 +1003,15 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
       {/* ================= MODAL 1: STORY OBJECTS (#FFBA84 CARD · 統一規格彈出視窗) ================= */}
       <StoryCardModal
         object={activeStoryObject}
-        onClose={() => setActiveStoryObject(null)}
+        onClose={closeActiveModal}
       />
 
       {/* ================= MODAL 2: TICKET DATER MACHINE (軋日機儀式) ================= */}
       <TicketDaterModal
         isOpen={isDaterOpen}
-        onClose={() => setIsDaterOpen(false)}
+        onClose={closeActiveModal}
+        hasTicket={hasTicket}
+        onOpenTicketMachine={onOpenTicketMachine}
       />
     </div>
   );

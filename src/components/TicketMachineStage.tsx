@@ -1,24 +1,36 @@
-import { useCallback, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HelpCircle, RotateCcw, X } from 'lucide-react';
 import { soundEngine } from '../utils/soundEngine';
 
 interface TicketMachineStageProps {
   onComplete: () => void;
+  onSkip: () => void;
   onReplayPrologue: () => void;
 }
 
 export function TicketMachineStage({
   onComplete,
+  onSkip,
   onReplayPrologue,
 }: TicketMachineStageProps) {
   // 5 Guided Steps:
   // Step 1: Click '一張'
   // Step 2: Click '莒光'
   // Step 3: Click '全票'
-  // Step 4: Click '勝興' (LED reveals '265')
+  // Step 4: Click '勝興' (LED reveals '238')
   // Step 5: Click Coin Slot (Pay and enter website)
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isExiting, setIsExiting] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const exitTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+      }
+    };
+  }, []);
 
   // Play button click sound (sfx_btn_click.mp3 with synth fallback) and unlock ambient BGM
   const playClickSound = useCallback(() => {
@@ -82,10 +94,37 @@ export function TicketMachineStage({
     playClickSound();
     soundEngine.playTicketDispense();
     setIsExiting(true);
-    window.setTimeout(() => {
+    exitTimerRef.current = window.setTimeout(() => {
       onComplete();
     }, 700);
   };
+
+  // Skip ticket machine directly (via 取消 button or subtle orange close dot)
+  const handleSkipMachine = useCallback(() => {
+    if (isExiting) return;
+    playClickSound();
+    setIsHelpOpen(false);
+    setIsExiting(true);
+    exitTimerRef.current = window.setTimeout(() => {
+      onSkip();
+    }, 450);
+  }, [isExiting, onSkip, playClickSound]);
+
+  // Open help prompt (via 呼叫 button)
+  const handleOpenHelp = () => {
+    if (isExiting) return;
+    playClickSound();
+    setIsHelpOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isHelpOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsHelpOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isHelpOpen]);
 
   // 10 Station names on the panel
   const STATIONS_ROW_1 = ['台北', '板橋', '新竹', '苗栗', '三義'];
@@ -123,7 +162,19 @@ export function TicketMachineStage({
         {/* Machine Head Fascia */}
         <header className="bg-[#082652] border border-[#FCFAF2]/20 rounded-t-sm px-3 py-1.5 flex items-center justify-between text-[#FCFAF2] shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#F05E1C] shadow-[0_0_6px_#F05E1C]" />
+            <button
+              type="button"
+              onClick={handleSkipMachine}
+              aria-label="關閉售票機並略過購票"
+              title="略過售票機"
+              className="group w-3.5 h-3.5 rounded-full bg-[#F05E1C] shadow-[0_0_6px_#F05E1C] inline-flex items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#FFBA84]"
+            >
+              <X
+                className="w-2.5 h-2.5 text-[#082652]/55 group-hover:text-[#0C0C0C]/90 transition-colors"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              />
+            </button>
             <h1 className="text-xs sm:text-sm font-serif font-bold tracking-[0.18em]">
               
             </h1>
@@ -194,12 +245,12 @@ export function TicketMachineStage({
               {/* Red LED 7-Segment Display */}
               <div className="w-full bg-[#120000] border-2 border-[#330000] rounded-xs px-2 py-1 text-right shadow-[inset_0_0_8px_rgba(255,0,0,0.4)]">
                 <span className="text-xl sm:text-2xl font-mono tabular-nums font-bold text-[#FF1A1A] drop-shadow-[0_0_6px_#FF0000]">
-                  {currentStep >= 5 ? '265' : '000'}
+                  {currentStep >= 5 ? '238' : '000'}
                 </span>
                 <span className="text-[9px] font-mono text-[#FF8080] ml-1">元</span>
               </div>
               <span className="text-[8px] font-mono text-[#0C0C0C]/50 mt-0.5">
-                {currentStep >= 5 ? '請投入 265 元' : '應付票價'}
+                {currentStep >= 5 ? '請投入 238 元' : '應付票價'}
               </span>
             </div>
           </div>
@@ -345,20 +396,20 @@ export function TicketMachineStage({
               </button>
             ))}
 
-            {/* Right: Auxiliary Small Buttons (呼叫 / 取消 裝飾鍵) */}
+            {/* Right: Auxiliary Functional Buttons (取消 / 呼叫) */}
             <button
               type="button"
-              onClick={handleLockedClick}
-              aria-disabled="true"
-              className="min-h-[42px] rounded-xs text-[10px] bg-[#9E2A2B] text-[#FCFAF2]/80 border border-[#721C24] opacity-75 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
+              onClick={handleSkipMachine}
+              className="min-h-[42px] rounded-xs text-[10px] bg-[#9E2A2B] hover:bg-[#B83233] text-[#FCFAF2] border border-[#721C24] cursor-pointer active:scale-95 transition-all flex items-center justify-center font-medium"
+              title="略過售票機直接進入展覽"
             >
               取消
             </button>
             <button
               type="button"
-              onClick={handleLockedClick}
-              aria-disabled="true"
-              className="min-h-[42px] rounded-xs text-[10px] bg-[#2E4A62] text-[#FCFAF2]/80 border border-[#1C3042] opacity-75 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
+              onClick={handleOpenHelp}
+              className="min-h-[42px] rounded-xs text-[10px] bg-[#2E4A62] hover:bg-[#3A5D7B] text-[#FCFAF2] border border-[#1C3042] cursor-pointer active:scale-95 transition-all flex items-center justify-center font-medium"
+              title="查看購票說明與提示"
             >
               呼叫
             </button>
@@ -446,6 +497,73 @@ export function TicketMachineStage({
         </section>
       </div>
       </div>
+
+      {/* 站務呼叫提示框（點擊「呼叫」開啟） */}
+      {isHelpOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ticket-help-title"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0C0C0C]/80 backdrop-blur-xs animate-stage-fade-in"
+          onClick={() => setIsHelpOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#FCFAF2] text-[#0C0C0C] border-2 border-[#FFBA84] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-2 bg-[#0B346E]" />
+            <div className="h-1 bg-[#F05E1C]" />
+            <div className="p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2 text-[#0B346E]">
+                  <HelpCircle className="w-4 h-4 text-[#F05E1C] shrink-0" aria-hidden="true" />
+                  <h2
+                    id="ticket-help-title"
+                    className="text-base font-serif font-semibold tracking-[0.12em]"
+                  >
+                    站務員提示
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsHelpOpen(false)}
+                  aria-label="關閉提示視窗"
+                  className="inline-flex items-center justify-center w-8 h-8 text-[#0C0C0C]/65 hover:text-[#F05E1C] transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <p className="mt-3 text-sm leading-[1.85] text-[#0C0C0C]/85">
+                只要依照機台上<span className="font-semibold text-[#F05E1C]">發亮的按鈕</span>依序操作並完成投幣，就能獲得專屬的 167 次莒光號車票，進入舊山線地圖後還有互動驚喜可以體驗喔！
+              </p>
+              <p className="mt-2 text-xs leading-[1.7] text-[#0C0C0C]/65">
+                若想先直接瀏覽展覽，也可以按下「取消」關閉售票機略過此環節。
+              </p>
+
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleSkipMachine}
+                  className="min-h-[38px] px-3.5 py-1.5 text-xs tracking-[0.1em] border border-[#0C0C0C]/25 text-[#0C0C0C]/75 hover:border-[#9E2A2B] hover:text-[#9E2A2B] transition-colors cursor-pointer"
+                >
+                  取消並略過
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickSound();
+                    setIsHelpOpen(false);
+                  }}
+                  className="min-h-[38px] px-4 py-1.5 text-xs tracking-[0.12em] bg-[#0B346E] hover:bg-[#F05E1C] text-[#FCFAF2] transition-colors cursor-pointer font-medium"
+                >
+                  繼續購票
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

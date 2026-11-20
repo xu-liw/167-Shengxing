@@ -22,11 +22,20 @@ interface ExhibitionMainProps {
   onSelectTab: (tab: ExhibitionTabId) => void;
   onReplayPrologue: () => void;
   onOpenTicketMachine: () => void;
+  hasTicket: boolean;
+  activeMapModalId: string | null;
+  onOpenMapModal: (modalId: string) => void;
+  onCloseMapModal: () => void;
 }
 
 export function ExhibitionMain({
   activeTab,
   onSelectTab,
+  onOpenTicketMachine,
+  hasTicket,
+  activeMapModalId,
+  onOpenMapModal,
+  onCloseMapModal,
 }: ExhibitionMainProps) {
   const [, setSelectedStopId] = useState<string>('shengxing');
   const [expandedPlateId, setExpandedPlateId] = useState<string>(
@@ -75,7 +84,14 @@ export function ExhibitionMain({
             key="tab-explore"
             className="w-full h-full overflow-hidden animate-page-enter"
           >
-            <InteractiveMap onSelectStation={(stationId) => setSelectedStopId(stationId)} />
+            <InteractiveMap
+              onSelectStation={(stationId) => setSelectedStopId(stationId)}
+              hasTicket={hasTicket}
+              onOpenTicketMachine={onOpenTicketMachine}
+              activeModalId={activeMapModalId}
+              onOpenModal={onOpenMapModal}
+              onCloseModal={onCloseMapModal}
+            />
           </div>
         )}
 

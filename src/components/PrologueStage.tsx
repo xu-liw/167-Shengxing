@@ -9,13 +9,14 @@ interface PrologueStageProps {
 export function PrologueStage({ onComplete }: PrologueStageProps) {
   const [isFadingOut, setIsFadingOut] = useState(false);
   const completedRef = useRef(false);
+  const exitTimerRef = useRef<number | null>(null);
 
   const triggerExit = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
     soundEngine.unlock();
     setIsFadingOut(true);
-    window.setTimeout(() => {
+    exitTimerRef.current = window.setTimeout(() => {
       onComplete();
     }, 750);
   }, [onComplete]);
@@ -31,6 +32,9 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
 
     return () => {
       window.clearTimeout(autoTimer);
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+      }
     };
   }, [triggerExit]);
 
@@ -74,14 +78,14 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
 
           {/* Line 2 (Middle column) */}
           <p
-            className="animate-prologue-line text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.26em] text-[#FFBA84] self-center"
+            className="animate-prologue-line flex flex-nowrap items-center whitespace-nowrap text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.26em] text-[#FFBA84] self-center"
             style={{ animationDelay: '2.5s' }}
           >
-            這次，讓我們一起回到那一天晚上
+            <span className="whitespace-nowrap">這次，讓我們一起回到那一天晚上</span>
             <span className="sr-only">……</span>
             <span
               aria-hidden="true"
-              className="inline-flex flex-col items-center justify-center gap-[4px] sm:gap-[5px] align-middle mt-1.5"
+              className="inline-flex flex-col items-center justify-center gap-[3.5px] sm:gap-[4.5px] shrink-0 mt-1"
               style={{ writingMode: 'horizontal-tb' }}
             >
               {[0, 1, 2, 3, 4, 5].map((dot) => (
@@ -102,8 +106,14 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
               aria-hidden="true"
               className="block w-px h-10 sm:h-14 bg-[#F05E1C]/80"
             />
-            <h1 className="text-2xl sm:text-3xl md:text-4xl tracking-[0.25em] text-[#FCFAF2] font-normal whitespace-nowrap">
-              167次<span className="text-[#F05E1C]">-</span>勝興
+            <h1 className="inline-flex items-center text-2xl sm:text-3xl md:text-4xl tracking-[0.25em] text-[#FCFAF2] font-normal whitespace-nowrap">
+              <span>167次</span>
+              <span className="sr-only">-</span>
+              <span
+                aria-hidden="true"
+                className="inline-block w-[2px] h-[0.42em] bg-[#F05E1C] mt-[0.1em] mb-[0.35em] shrink-0"
+              />
+              <span>勝興</span>
             </h1>
           </div>
         </div>

@@ -7,9 +7,16 @@ import { soundEngine } from '../utils/soundEngine';
 interface TicketDaterModalProps {
   isOpen: boolean;
   onClose: () => void;
+  hasTicket?: boolean;
+  onOpenTicketMachine?: () => void;
 }
 
-export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
+export function TicketDaterModal({
+  isOpen,
+  onClose,
+  hasTicket = true,
+  onOpenTicketMachine,
+}: TicketDaterModalProps) {
   // Date options: 1998.09.23 (ROC 87.09.23) vs Today's ROC date
   const [selectedDateType, setSelectedDateType] = useState<'historical' | 'today'>('historical');
 
@@ -20,6 +27,15 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
 
   // Canvas Ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Auto-resolved custom artwork (scene_sx_dater.png or .jpg) if uploaded
   const { resolvedUrl: daterArtworkUrl } = useResolvedImage(PUBLIC_ASSETS.images.sceneSxDater);
@@ -185,7 +201,7 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
       ctx.textAlign = 'left';
       ctx.fillStyle = '#0C0C0C';
       ctx.font = '600 20px "Noto Serif TC", serif';
-      ctx.fillText('全票 1 張 · 票價 NT$ 265 元', 48, 316);
+      ctx.fillText('全票 1 張 · 票價 NT$ 238 元', 48, 316);
 
       ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
       ctx.font = '400 15px "Noto Serif TC", serif';
@@ -261,6 +277,10 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
 
   // Execute heavy press stamping animation & audio
   const handleExecutePress = () => {
+    if (!hasTicket) {
+      soundEngine.playRejectBuzz();
+      return;
+    }
     if (isPressing) return;
     setIsPressing(true);
     soundEngine.playMechanicalStamp();
@@ -345,6 +365,28 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
             昔日台鐵車站售票窗口均設有厚重的生鐵軋日機。售票員將硬紙卡車票插入機口、重重一壓，鋼字輪便會將出票日期以深紫色油墨深深壓印在票面上。請於下方選擇要壓印的歷史日期或今日日期：
           </p>
 
+          {/* Hint notice when user skipped the ticket machine */}
+          {!hasTicket && (
+            <div className="mt-3 p-3.5 bg-[#FFBA84]/18 border-l-3 border-[#F05E1C] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs leading-[1.75] text-[#0C0C0C]/85">
+              <p>
+                <span className="font-semibold text-[#F05E1C]">小提示：</span>
+                您尚未在「自動售票機」完成購票取得車票，因此目前無法使用軋日機壓印日期。請先回到售票機完成操作，即可回來體驗壓印喔！
+              </p>
+              {onOpenTicketMachine && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playSelectClick();
+                    onOpenTicketMachine();
+                  }}
+                  className="shrink-0 self-start sm:self-center px-3 py-1.5 bg-[#0B346E] hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-[0.08em] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  前往售票機 →
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Date Selection Segmented Control */}
           <div className="mt-5 p-3 bg-[#0B346E]/5 border border-[#0B346E]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-semibold tracking-[0.14em] text-[#0B346E] flex items-center gap-1.5">
@@ -410,16 +452,26 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
               <button
                 type="button"
                 onClick={handleExecutePress}
-                disabled={isPressing}
-                className={`inline-flex items-center gap-2 min-h-[42px] px-6 py-2 text-sm tracking-[0.16em] transition-all duration-200 cursor-pointer shadow-md font-medium text-[#FCFAF2] ${
-                  isPressing
-                    ? 'bg-[#0C0C0C] translate-y-1 scale-95 ring-4 ring-[#FFBA84]'
-                    : isStamped
-                      ? 'bg-[#0B346E] hover:bg-[#092957]'
-                      : 'bg-[#0C0C0C] hover:bg-[#F05E1C]'
+                disabled={isPressing || !hasTicket}
+                className={`inline-flex items-center gap-2 min-h-[42px] px-6 py-2 text-sm tracking-[0.16em] transition-all duration-200 font-medium ${
+                  !hasTicket
+                    ? 'bg-[#0C0C0C]/20 text-[#0C0C0C]/45 border border-[#0C0C0C]/15 cursor-not-allowed shadow-none'
+                    : isPressing
+                      ? 'bg-[#0C0C0C] text-[#FCFAF2] translate-y-1 scale-95 ring-4 ring-[#FFBA84] shadow-md cursor-pointer'
+                      : isStamped
+                        ? 'bg-[#0B346E] hover:bg-[#092957] text-[#FCFAF2] shadow-md cursor-pointer'
+                        : 'bg-[#0C0C0C] hover:bg-[#F05E1C] text-[#FCFAF2] shadow-md cursor-pointer'
                 }`}
               >
-                <span>{isPressing ? '壓印重擊中⋯⋯' : isStamped ? '重新壓印鋼字' : '執行重壓壓印'}</span>
+                <span>
+                  {!hasTicket
+                    ? '請先至售票機購票'
+                    : isPressing
+                      ? '壓印重擊中⋯⋯'
+                      : isStamped
+                        ? '重新壓印鋼字'
+                        : '執行重壓壓印'}
+                </span>
               </button>
             </div>
           </div>
