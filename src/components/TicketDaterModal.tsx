@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Calendar, Check, Download, RotateCcw, X } from 'lucide-react';
+import { PUBLIC_ASSETS, useResolvedImage } from '../utils/assetResolver';
 import { soundEngine } from '../utils/soundEngine';
 
 interface TicketDaterModalProps {
@@ -18,6 +19,30 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
 
   // Canvas Ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Auto-resolved custom artwork (scene_sx_dater.png or .jpg) if uploaded
+  const { resolvedUrl: daterArtworkUrl } = useResolvedImage(PUBLIC_ASSETS.images.sceneSxDater);
+  const [loadedArtwork, setLoadedArtwork] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!daterArtworkUrl) {
+      setLoadedArtwork(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (!cancelled) setLoadedArtwork(img);
+    };
+    img.onerror = () => {
+      if (!cancelled) setLoadedArtwork(null);
+    };
+    img.src = daterArtworkUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [daterArtworkUrl]);
 
   // Compute Today's ROC Date string (e.g. 115.11.20)
   const todayRocDate = (() => {
@@ -48,111 +73,123 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
     canvas.width = width;
     canvas.height = height;
 
-    // 1. Cardboard Background (Vintage Ivory #F7F4EB)
-    ctx.fillStyle = '#F8F5EC';
-    ctx.fillRect(0, 0, width, height);
+    if (loadedArtwork) {
+      // Draw uploaded scene_sx_dater.png / .jpg artwork scaled cleanly to fill 800x480
+      ctx.fillStyle = '#F8F5EC';
+      ctx.fillRect(0, 0, width, height);
+      const scale = Math.max(width / loadedArtwork.width, height / loadedArtwork.height);
+      const drawW = loadedArtwork.width * scale;
+      const drawH = loadedArtwork.height * scale;
+      const offsetX = (width - drawW) / 2;
+      const offsetY = (height - drawH) / 2;
+      ctx.drawImage(loadedArtwork, offsetX, offsetY, drawW, drawH);
+    } else {
+      // 1. Cardboard Background (Vintage Ivory #F7F4EB)
+      ctx.fillStyle = '#F8F5EC';
+      ctx.fillRect(0, 0, width, height);
 
-    // Subtle paper fibers & texture
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.02)';
-    for (let i = 0; i < 2800; i++) {
-      const rx = Math.random() * width;
-      const ry = Math.random() * height;
-      ctx.fillRect(rx, ry, 1.2, 1.2);
+      // Subtle paper fibers & texture
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.02)';
+      for (let i = 0; i < 2800; i++) {
+        const rx = Math.random() * width;
+        const ry = Math.random() * height;
+        ctx.fillRect(rx, ry, 1.2, 1.2);
+      }
+
+      // Outer card border
+      ctx.strokeStyle = '#26221F';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(8, 8, width - 16, height - 16);
+
+      // Thin inner hairline
+      ctx.strokeStyle = 'rgba(12, 12, 12, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(16, 16, width - 32, height - 32);
+
+      // 2. Top Juguang Orange Double Stripes
+      ctx.fillStyle = '#F05E1C';
+      ctx.fillRect(16, 16, width - 32, 28);
+      ctx.fillStyle = '#FFBA84';
+      ctx.fillRect(16, 44, width - 32, 10);
+
+      // 3. Header Typography
+      ctx.fillStyle = '#0C0C0C';
+      ctx.font = '600 24px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('臺灣鐵路管理局 · 莒光號特等客車', width / 2, 92);
+
+      // Dotted separator line
+      ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(40, 112);
+      ctx.lineTo(width - 40, 112);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 4. Ticket Serial & Code
+      ctx.font = '500 16px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.7)';
+      ctx.fillText('NO. 980923-167', 48, 142);
+      ctx.textAlign = 'right';
+      ctx.fillText('山線單程票', width - 48, 142);
+
+      // 5. Origin & Destination Section
+      // Origin: 台北
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
+      ctx.font = '500 16px "Noto Serif TC", serif';
+      ctx.fillText('起站', 70, 185);
+      ctx.fillStyle = '#0C0C0C';
+      ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.fillText('台北', 70, 248);
+
+      // Center Train Info
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#F05E1C';
+      ctx.font = '700 24px "IBM Plex Mono", monospace';
+      ctx.fillText('167 次 莒光', width / 2, 205);
+
+      ctx.strokeStyle = '#0C0C0C';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(width / 2 - 80, 222);
+      ctx.lineTo(width / 2 + 80, 222);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.75)';
+      ctx.font = '500 17px "Noto Serif TC", serif';
+      ctx.fillText('經由舊山線（縱貫線）', width / 2, 248);
+
+      // Destination: 勝興
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
+      ctx.font = '500 16px "Noto Serif TC", serif';
+      ctx.fillText('迄站', width - 70, 185);
+      ctx.fillStyle = '#0C0C0C';
+      ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.fillText('勝興', width - 70, 248);
+
+      // Dotted separator line
+      ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(40, 280);
+      ctx.lineTo(width - 40, 280);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 6. Ticket Fare & Conditions
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#0C0C0C';
+      ctx.font = '600 20px "Noto Serif TC", serif';
+      ctx.fillText('全票 1 張 · 票價 NT$ 265 元', 48, 316);
+
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
+      ctx.font = '400 15px "Noto Serif TC", serif';
+      ctx.fillText('限當日當次車有效 · 標高 402.326m 縱貫鐵路最高點紀念', 48, 344);
     }
-
-    // Outer card border
-    ctx.strokeStyle = '#26221F';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(8, 8, width - 16, height - 16);
-
-    // Thin inner hairline
-    ctx.strokeStyle = 'rgba(12, 12, 12, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(16, 16, width - 32, height - 32);
-
-    // 2. Top Juguang Orange Double Stripes
-    ctx.fillStyle = '#F05E1C';
-    ctx.fillRect(16, 16, width - 32, 28);
-    ctx.fillStyle = '#FFBA84';
-    ctx.fillRect(16, 44, width - 32, 10);
-
-    // 3. Header Typography
-    ctx.fillStyle = '#0C0C0C';
-    ctx.font = '600 24px "Cactus Classical Serif", "Noto Serif TC", serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('臺灣鐵路管理局 · 莒光號特等客車', width / 2, 92);
-
-    // Dotted separator line
-    ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(40, 112);
-    ctx.lineTo(width - 40, 112);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 4. Ticket Serial & Code
-    ctx.font = '500 16px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.7)';
-    ctx.fillText('NO. 980923-167', 48, 142);
-    ctx.textAlign = 'right';
-    ctx.fillText('山線單程票', width - 48, 142);
-
-    // 5. Origin & Destination Section
-    // Origin: 台北
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
-    ctx.font = '500 16px "Noto Serif TC", serif';
-    ctx.fillText('起站', 70, 185);
-    ctx.fillStyle = '#0C0C0C';
-    ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
-    ctx.fillText('台北', 70, 248);
-
-    // Center Train Info
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#F05E1C';
-    ctx.font = '700 24px "IBM Plex Mono", monospace';
-    ctx.fillText('167 次 莒光', width / 2, 205);
-
-    ctx.strokeStyle = '#0C0C0C';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(width / 2 - 80, 222);
-    ctx.lineTo(width / 2 + 80, 222);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.75)';
-    ctx.font = '500 17px "Noto Serif TC", serif';
-    ctx.fillText('經由舊山線（縱貫線）', width / 2, 248);
-
-    // Destination: 勝興
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
-    ctx.font = '500 16px "Noto Serif TC", serif';
-    ctx.fillText('迄站', width - 70, 185);
-    ctx.fillStyle = '#0C0C0C';
-    ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
-    ctx.fillText('勝興', width - 70, 248);
-
-    // Dotted separator line
-    ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(40, 280);
-    ctx.lineTo(width - 40, 280);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 6. Ticket Fare & Conditions
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#0C0C0C';
-    ctx.font = '600 20px "Noto Serif TC", serif';
-    ctx.fillText('全票 1 張 · 票價 NT$ 265 元', 48, 316);
-
-    ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
-    ctx.font = '400 15px "Noto Serif TC", serif';
-    ctx.fillText('限當日當次車有效 · 標高 402.326m 縱貫鐵路最高點紀念', 48, 344);
 
     // 7. If Stamped, Render Ink Stamp Date & Station Seal
     if (isStamped) {
@@ -219,7 +256,7 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
       ctx.fillText('【軋日機油墨壓印處】', 230, 406);
       ctx.restore();
     }
-  }, [isOpen, selectedDateType, isStamped, activeDateString]);
+  }, [isOpen, selectedDateType, isStamped, activeDateString, loadedArtwork]);
 
   // Execute heavy press stamping animation & audio
   const handleExecutePress = () => {

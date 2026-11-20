@@ -20,57 +20,65 @@ export function TicketMachineStage({
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isExiting, setIsExiting] = useState(false);
 
-  // Play button click sound with /audio/sfx_btn_click.mp3 and fallback to soundEngine
+  // Play button click sound (sfx_btn_click.mp3 with synth fallback) and unlock ambient BGM
   const playClickSound = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const audio = new Audio('/audio/sfx_btn_click.mp3');
-        audio.volume = 0.7;
-        const promise = audio.play();
-        if (promise) {
-          promise.catch(() => {
-            soundEngine.playSelectClick();
-          });
-        }
-      } catch {
-        soundEngine.playSelectClick();
-      }
-    } else {
-      soundEngine.playSelectClick();
-    }
+    soundEngine.startAmbient();
+    soundEngine.playSelectClick();
+  }, []);
+
+  // Play locked/disabled button buzz (sfx_btn_locked.mp3 with synth fallback)
+  const handleLockedClick = useCallback(() => {
+    soundEngine.startAmbient();
+    soundEngine.playRejectBuzz();
   }, []);
 
   // Handler for Step 1: Click '一張'
   const handleSelectQuantity = () => {
-    if (currentStep !== 1) return;
+    if (currentStep !== 1) {
+      handleLockedClick();
+      return;
+    }
     playClickSound();
     setCurrentStep(2);
   };
 
   // Handler for Step 2: Click '莒光'
   const handleSelectTrain = () => {
-    if (currentStep !== 2) return;
+    if (currentStep !== 2) {
+      handleLockedClick();
+      return;
+    }
     playClickSound();
     setCurrentStep(3);
   };
 
   // Handler for Step 3: Click '全票'
   const handleSelectType = () => {
-    if (currentStep !== 3) return;
+    if (currentStep !== 3) {
+      handleLockedClick();
+      return;
+    }
     playClickSound();
     setCurrentStep(4);
   };
 
   // Handler for Step 4: Click '勝興'
   const handleSelectStation = () => {
-    if (currentStep !== 4) return;
+    if (currentStep !== 4) {
+      handleLockedClick();
+      return;
+    }
     playClickSound();
     setCurrentStep(5);
   };
 
   // Handler for Step 5: Click Coin Slot (Pay & smooth exit)
   const handleInsertCoin = () => {
-    if (currentStep !== 5 || isExiting) return;
+    if (isExiting) return;
+    if (currentStep !== 5) {
+      handleLockedClick();
+      return;
+    }
     playClickSound();
     soundEngine.playTicketDispense();
     setIsExiting(true);
@@ -151,7 +159,7 @@ export function TicketMachineStage({
               <button
                 type="button"
                 onClick={handleInsertCoin}
-                disabled={currentStep !== 5 || isExiting}
+                aria-disabled={currentStep !== 5 || isExiting}
                 aria-label="硬幣投入口，點擊完成付費"
                 className={`relative w-11 h-11 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
                   currentStep === 5
@@ -214,7 +222,7 @@ export function TicketMachineStage({
               <button
                 type="button"
                 onClick={handleSelectQuantity}
-                disabled={currentStep !== 1}
+                aria-disabled={currentStep !== 1}
                 className={`min-h-[42px] rounded-xs text-xs font-bold transition-all flex flex-col items-center justify-center ${
                   currentStep === 1
                     ? 'bg-[#FFF8E7] text-[#0C0C0C] border-2 border-[#F05E1C] shadow-[0_0_12px_rgba(240,94,28,0.85)] animate-pulse cursor-pointer scale-105'
@@ -226,13 +234,14 @@ export function TicketMachineStage({
                 <span>一張</span>
               </button>
 
-              {/* 二張、三張、四張 (Unpowered) */}
+              {/* 二張、三張、四張 (Unpowered - plays sfx_btn_locked.mp3 on press) */}
               {['二張', '三張', '四張'].map((label) => (
                 <button
                   key={label}
                   type="button"
-                  disabled
-                  className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed flex items-center justify-center"
+                  onClick={handleLockedClick}
+                  aria-disabled="true"
+                  className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
                 >
                   {label}
                 </button>
@@ -255,8 +264,9 @@ export function TicketMachineStage({
               {/* 自強 (Unpowered) */}
               <button
                 type="button"
-                disabled
-                className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed flex items-center justify-center"
+                onClick={handleLockedClick}
+                aria-disabled="true"
+                className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
               >
                 自強
               </button>
@@ -265,7 +275,7 @@ export function TicketMachineStage({
               <button
                 type="button"
                 onClick={handleSelectTrain}
-                disabled={currentStep !== 2}
+                aria-disabled={currentStep !== 2}
                 className={`min-h-[42px] rounded-xs text-xs font-bold transition-all flex flex-col items-center justify-center ${
                   currentStep === 2
                     ? 'bg-[#FFF8E7] text-[#0C0C0C] border-2 border-[#F05E1C] shadow-[0_0_12px_rgba(240,94,28,0.85)] animate-pulse cursor-pointer scale-105'
@@ -282,8 +292,9 @@ export function TicketMachineStage({
                 <button
                   key={label}
                   type="button"
-                  disabled
-                  className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed flex items-center justify-center"
+                  onClick={handleLockedClick}
+                  aria-disabled="true"
+                  className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
                 >
                   {label}
                 </button>
@@ -308,7 +319,7 @@ export function TicketMachineStage({
             <button
               type="button"
               onClick={handleSelectType}
-              disabled={currentStep !== 3}
+              aria-disabled={currentStep !== 3}
               className={`min-h-[42px] rounded-xs text-xs font-bold transition-all flex flex-col items-center justify-center ${
                 currentStep === 3
                   ? 'bg-[#FFF8E7] text-[#0C0C0C] border-2 border-[#F05E1C] shadow-[0_0_12px_rgba(240,94,28,0.85)] animate-pulse cursor-pointer scale-105'
@@ -325,8 +336,9 @@ export function TicketMachineStage({
               <button
                 key={label}
                 type="button"
-                disabled
-                className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed flex items-center justify-center"
+                onClick={handleLockedClick}
+                aria-disabled="true"
+                className="min-h-[42px] rounded-xs text-xs bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
               >
                 {label}
               </button>
@@ -335,15 +347,17 @@ export function TicketMachineStage({
             {/* Right: Auxiliary Small Buttons (呼叫 / 取消 裝飾鍵) */}
             <button
               type="button"
-              disabled
-              className="min-h-[42px] rounded-xs text-[10px] bg-[#9E2A2B] text-[#FCFAF2]/80 border border-[#721C24] opacity-75 cursor-not-allowed flex items-center justify-center"
+              onClick={handleLockedClick}
+              aria-disabled="true"
+              className="min-h-[42px] rounded-xs text-[10px] bg-[#9E2A2B] text-[#FCFAF2]/80 border border-[#721C24] opacity-75 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
             >
               取消
             </button>
             <button
               type="button"
-              disabled
-              className="min-h-[42px] rounded-xs text-[10px] bg-[#2E4A62] text-[#FCFAF2]/80 border border-[#1C3042] opacity-75 cursor-not-allowed flex items-center justify-center"
+              onClick={handleLockedClick}
+              aria-disabled="true"
+              className="min-h-[42px] rounded-xs text-[10px] bg-[#2E4A62] text-[#FCFAF2]/80 border border-[#1C3042] opacity-75 cursor-not-allowed active:scale-95 transition-transform flex items-center justify-center"
             >
               呼叫
             </button>
@@ -372,8 +386,9 @@ export function TicketMachineStage({
                 <button
                   key={st}
                   type="button"
-                  disabled
-                  className="w-full h-full min-h-[44px] rounded-xs text-xs font-serif bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed flex flex-col items-center justify-center"
+                  onClick={handleLockedClick}
+                  aria-disabled="true"
+                  className="w-full h-full min-h-[44px] rounded-xs text-xs font-serif bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95 transition-transform flex flex-col items-center justify-center"
                 >
                   <span>{st}</span>
                 </button>
@@ -388,14 +403,14 @@ export function TicketMachineStage({
                   <button
                     key={st}
                     type="button"
-                    onClick={isShengxing ? handleSelectStation : undefined}
-                    disabled={!isShengxing || currentStep !== 4}
+                    onClick={isShengxing ? handleSelectStation : handleLockedClick}
+                    aria-disabled={!isShengxing || currentStep !== 4}
                     className={`w-full h-full min-h-[44px] rounded-xs text-xs font-serif transition-all flex flex-col items-center justify-center ${
                       isShengxing && currentStep === 4
                         ? 'bg-[#FFF8E7] text-[#0C0C0C] border-2 border-[#F05E1C] shadow-[0_0_14px_rgba(240,94,28,0.9)] animate-pulse cursor-pointer scale-105 font-bold'
                         : isShengxing && currentStep > 4
                           ? 'bg-[#F05E1C] text-[#FCFAF2] border border-[#FFBA84] shadow-sm font-bold'
-                          : 'bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed'
+                          : 'bg-[#181818] text-[#555555] border border-[#2A2A2A] opacity-50 cursor-not-allowed active:scale-95'
                     }`}
                   >
                     <span>{st}</span>

@@ -93,10 +93,10 @@ export function ExhibitionMain({
             <header className="pb-8 border-b border-[#0C0C0C]/15">
               <p className="text-xs tracking-[0.2em] text-[#F05E1C]">02. 沿線圖鑑</p>
               <h1 className="mt-2 text-3xl sm:text-4xl tracking-[0.14em] font-normal text-[#0C0C0C]">
-                舊山線沿線物件檔案
+                舊山線沿線物件介紹
               </h1>
               <p className="mt-3 text-sm sm:text-base leading-[1.8] text-[#0C0C0C]/70 max-w-2xl">
-                收錄「探索舊山線」地圖中的 11 個核心景點與鐵道設施。點擊任一項目即可向下展開大圖、小故事、散步提示與參考資料來源。
+                點擊任一項目即可向下展開大圖、小故事與散步提示。
               </p>
 
               {/* 全文關鍵字搜尋欄 */}
@@ -107,7 +107,8 @@ export function ExhibitionMain({
                     aria-hidden="true"
                   />
                   <input
-                    type="search"
+                    type="text"
+                    inputMode="search"
                     value={archiveQuery}
                     onChange={(e) => setArchiveQuery(e.target.value)}
                     placeholder="搜尋標題或任何關鍵字（如：勝興、402、路牌、隧道、樟腦…）"
@@ -149,7 +150,7 @@ export function ExhibitionMain({
                     onClick={() => setArchiveQuery('')}
                     className="mt-5 min-h-[40px] px-5 py-2 border border-[#0C0C0C]/25 text-xs tracking-[0.14em] text-[#0C0C0C] hover:border-[#F05E1C] hover:text-[#F05E1C] transition-colors cursor-pointer"
                   >
-                    顯示全部 11 個項目
+                    顯示全部 {ARCHIVE_PLATES.length} 個項目
                   </button>
                 </div>
               ) : (
@@ -171,12 +172,13 @@ export function ExhibitionMain({
                         }`}
                       >
                         <div className="flex items-center gap-4 min-w-0">
-                          {/* 最左側：小圖預留框（日後更新小圖直接替換圖片路徑即可） */}
-                          <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-md overflow-hidden border border-[#0C0C0C]/15 bg-[#0C0C0C]/5 shrink-0">
+                          {/* 最左側：小圖預留框（自動套用地圖小圖 .png / .jpg） */}
+                          <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-md overflow-hidden border border-[#0C0C0C]/15 bg-[#0C0C0C]/5 shrink-0 p-1 flex items-center justify-center">
                             <ResilientImage
                               src={plate.thumbnail || plate.image}
+                              fallbackSrc={plate.fallbackImage}
                               alt={plate.title}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain"
                               fallbackTitle={orderLabel}
                               fallbackSubtitle=""
                             />
@@ -223,11 +225,12 @@ export function ExhibitionMain({
                               isExpanded ? 'translate-y-0' : '-translate-y-3'
                             }`}
                           >
-                            {/* 1. 大圖 */}
+                            {/* 1. 大圖（自動套用 scene_*.jpg / .png） */}
                             <div className="md:col-span-5">
                               <div className="aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18]">
                                 <ResilientImage
                                   src={plate.image}
+                                  fallbackSrc={plate.fallbackImage}
                                   alt={plate.imageAlt || plate.title}
                                   className="w-full h-full object-cover"
                                   fallbackTitle={plate.title}
@@ -332,12 +335,31 @@ export function ExhibitionMain({
                         <dt className="text-xs tracking-[0.16em] text-[#0C0C0C]/55">
                           {credit.role}
                         </dt>
-                        <dd className="mt-1.5 text-xl tracking-[0.14em] text-[#0C0C0C]">
-                          {credit.members.join('、')}
-                        </dd>
-                        <dd className="mt-1 text-xs leading-relaxed text-[#0C0C0C]/65">
-                          {credit.note}
-                        </dd>
+                        {credit.memberDetails ? (
+                          <dd className="mt-3 space-y-3.5">
+                            {credit.memberDetails.map((member) => (
+                              <div key={member.name}>
+                                <p className="text-xl tracking-[0.14em] text-[#0C0C0C]">
+                                  {member.name}
+                                </p>
+                                <p className="mt-1 text-xs leading-relaxed text-[#0C0C0C]/65">
+                                  {member.task}
+                                </p>
+                              </div>
+                            ))}
+                          </dd>
+                        ) : (
+                          <>
+                            <dd className="mt-1.5 text-xl tracking-[0.14em] text-[#0C0C0C]">
+                              {credit.members.join('、')}
+                            </dd>
+                            {credit.note && (
+                              <dd className="mt-1 text-xs leading-relaxed text-[#0C0C0C]/65">
+                                {credit.note}
+                              </dd>
+                            )}
+                          </>
+                        )}
                       </div>
                     ))}
                   </dl>
@@ -495,8 +517,7 @@ export function ExhibitionMain({
 
             {/* Copyright Bottom Line */}
             <div className="pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs tracking-[0.1em] text-[#FCFAF2]/50">
-              <p>© 《167次-勝興》舊山線地方主題線上策展團隊</p>
-              <p className="font-mono tabular-nums whitespace-nowrap">1998.09.23 21:10 · 402.326M</p>
+              <p>©2026《167次-勝興》舊山線地方主題線上策展團隊 All Rights Reserved.</p>
             </div>
           </div>
         </footer>

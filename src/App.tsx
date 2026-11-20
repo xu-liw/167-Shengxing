@@ -26,6 +26,8 @@ export default function App() {
   }, []);
 
   const handleTicketComplete = useCallback(() => {
+    soundEngine.startAmbient();
+    soundEngine.playTrainWhistle();
     setActiveTab('explore');
     setStage('main');
     window.scrollTo({ top: 0 });

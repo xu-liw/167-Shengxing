@@ -1,0 +1,21 @@
+分類,項目名稱,地圖小圖 / 音檔名,彈窗大圖檔名,負責人,格式與規格說明
+各站站牌,① 三義站牌,sign_sanyi.png,scene_st_sanyi.jpg,謝妮霓,去背 PNG（白底藍字復古站牌）
+各站站牌,② 勝興站牌,sign_shengxing.png,,謝妮霓,去背 PNG（白底藍字復古站牌）
+各站站牌,③ 泰安站牌,sign_taian.png,scene_taian.jpg,謝妮霓,去背 PNG（白底藍字復古站牌）
+各站站牌,④ 后里站牌,sign_houli.png,scene_houli.jpg,謝妮霓,去背 PNG（白底藍字復古站牌）
+各站站牌,⑤ 豐原站牌,sign_fengyuan.png,scene_fengyuan.jpg,謝妮霓,去背 PNG（白底藍字復古站牌）
+勝興核心區,⑥ 勝興木造車站,icon_sx_station.png,-,謝妮霓,僅需小圖（去背 PNG，彈窗搭實拍照片）
+勝興核心區,⑦ 折返式軌道與加掛補機,icon_sx_switchback.png,scene_sx_switchback.jpg,謝妮霓,需小圖＋大圖（4:3 雙車頭推拉會車情境）
+勝興核心區,⑧ 開天隧道口與警總哨亭,icon_sx_tunnel.png,-,謝妮霓,僅需小圖（去背 PNG，彈窗搭實拍照片）
+勝興核心區,⑨ 海拔 402.326m 紀念碑,icon_sx_monument.png,-,謝妮霓,僅需小圖（去背 PNG，彈窗搭實拍照片）
+勝興核心區,⑩ 樟腦寮,icon_sx_camphor.png,scene_sx_camphor.jpg,謝妮霓,需小圖＋大圖（4:3 山林煉製樟腦情境）
+勝興核心區,⑪ 軋日機,icon_sx_dater.png,scene_sx_dater.png,謝妮霓,需小圖＋大圖（大圖保留壓印日期區域）
+介面與列車,⑫ 莒光號列車正面,ui_train_167.png,-,謝妮霓,去背 PNG（隨軌道移動）
+介面與列車,⑬ 電氣路牌閉塞器插畫,ui_block_instrument.png,-,謝妮霓,去背 PNG（右下角常駐裝置）
+聲音與音效,環境背景音（鐵軌節奏＋山林夜色）,bgm_old_mountain_line.mp3,-,陳宏倫,MP3 檔（30–60 秒可無縫循環 Lo-fi）
+聲音與音效,① 售票機按鍵「喀噠」機械聲,sfx_btn_click.mp3,-,陳宏倫,MP3 檔（1–3 秒短音效，正常按下）
+聲音與音效,② 售票機按鈕「卡住／無效」提示音,sfx_btn_locked.mp3,-,陳宏倫,MP3 檔（1–3 秒短音效，停用按鈕）
+聲音與音效,③ 軋日機「喀嚓！」壓印金屬聲,sfx_dater_stamp.mp3,-,陳宏倫,MP3 檔（1–3 秒短音效，清脆壓印聲）
+聲音與音效,④ 閉塞器「叮噹！」金屬鈴聲,sfx_block_bell.mp3,-,陳宏倫,MP3 檔（1–3 秒短音效，區間切換觸發）
+聲音與音效,⑤ 莒光號火車鳴笛聲,sfx_train_whistle.mp3,-,陳宏倫,MP3 檔（1–3 秒短音效，進地圖或點列車）
+背景底圖,⑱ 舊山線地圖底圖紋理,bg_map_texture.jpg,-,徐立威,可無縫拼接大地褐色草地與山林底圖

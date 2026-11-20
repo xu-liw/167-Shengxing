@@ -69,6 +69,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
           <div className="mt-5 aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18] shadow-sm relative">
             <ResilientImage
               src={object.image || ''}
+              fallbackSrc={object.fallbackImage}
               alt={object.imageAlt || object.name}
               className="w-full h-full object-cover"
               fallbackTitle={object.name}

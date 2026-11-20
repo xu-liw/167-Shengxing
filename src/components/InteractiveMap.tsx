@@ -8,13 +8,16 @@ import {
   TrainFront,
 } from 'lucide-react';
 import {
+  BLOCK_INSTRUMENT_DATA,
   BLOCK_SECTIONS,
   BlockSection,
   MAP_OBJECTS,
   MapObject,
+  TRAIN_167_OBJECT,
 } from '../data/exhibitionData';
+import { PUBLIC_ASSETS, useResolvedImage } from '../utils/assetResolver';
 import { soundEngine } from '../utils/soundEngine';
-import { BlockInstrumentModal } from './BlockInstrumentModal';
+import { MapIconImage } from './ResilientImage';
 import { StoryCardModal } from './StoryCardModal';
 import { TicketDaterModal } from './TicketDaterModal';
 
@@ -22,13 +25,53 @@ interface InteractiveMapProps {
   onSelectStation?: (stationId: string) => void;
 }
 
+// Active scrollable railway length from Sanyi (0%) to Fengyuan (100%)
+const ROUTE_LENGTH_LANDSCAPE = 2600;
+const ROUTE_LENGTH_PORTRAIT = 2200;
+
+// 5 station milestones along normalized progress t ∈ [0, 1] for track nodes & altimeter interpolation
+const ROUTE_MILESTONES = [
+  { t: 0.0, elevation: 302.0, label: '三義車站' },
+  { t: 0.36, elevation: 402.326, label: '勝興車站' },
+  { t: 0.7, elevation: 266.8, label: '泰安車站' },
+  { t: 0.86, elevation: 212.0, label: '后里車站' },
+  { t: 1.0, elevation: 215.0, label: '豐原車站' },
+] as const;
+
+/**
+ * Gentle Old Mountain Line S-curve across the cross-axis (percent 0..100).
+ * Strictly equals 50% with zero slope at t = 0 (三義) and t = 1 (豐原) so
+ * the faded north/south straight extensions connect seamlessly without kinks.
+ */
+function getTrackCrossPercent(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  return 50 + Math.sin(clamped * Math.PI * 2) * 3.5 * Math.sin(clamped * Math.PI);
+}
+
+/** Smoothly interpolate elevation along the 5 station milestones */
+function getElevationAtProgress(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  // Snap cleanly to 402.326m right around Shengxing summit
+  if (Math.abs(clamped - 0.36) < 0.015) return 402.326;
+
+  for (let i = 0; i < ROUTE_MILESTONES.length - 1; i++) {
+    const a = ROUTE_MILESTONES[i];
+    const b = ROUTE_MILESTONES[i + 1];
+    if (clamped >= a.t && clamped <= b.t) {
+      const ratio = (clamped - a.t) / (b.t - a.t);
+      return a.elevation + (b.elevation - a.elevation) * ratio;
+    }
+  }
+  return ROUTE_MILESTONES[ROUTE_MILESTONES.length - 1].elevation;
+}
+
 export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
-  // Map objects state (can be fine-tuned via drag in Debug mode)
+  // 11 map-placed clickable objects (can be fine-tuned via drag in Debug mode)
   const [objects, setObjects] = useState<MapObject[]>(() =>
     JSON.parse(JSON.stringify(MAP_OBJECTS))
   );
 
-  // Orientation state: auto-detect from window, but can be manually toggled
+  // Orientation state: auto-detect from window
   const [isLandscape, setIsLandscape] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth > window.innerHeight;
@@ -36,106 +79,121 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
     return true;
   });
 
-  const userToggledOrientationRef = useRef(false);
+  // Measured viewport dimensions (used so half-viewport north/south extensions keep the train centered)
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? Math.max(480, window.innerHeight - 64) : 720,
+  }));
 
-  // Debug mode state (toggled via 'D' key or UI button)
+  // Normalized scroll progress along active route: 0 = 三義, 0.36 = 勝興, 1 = 豐原
+  const [scrollProgress, setScrollProgress] = useState<number>(0.36);
+
+  // Debug mode state (toggled via 'D' key)
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  // Modal 1: 9 Story Objects Modal (#FFBA84 warm apricot card)
+  // Modals (all 13 items open StoryCardModal or TicketDaterModal)
   const [activeStoryObject, setActiveStoryObject] = useState<MapObject | null>(null);
-
-  // Modal 2: Ticket Dater Machine Modal (軋日機儀式)
   const [isDaterOpen, setIsDaterOpen] = useState(false);
 
-  // Modal 3: Block Instrument Modal (電氣路牌閉塞器科普卡片)
-  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
-
-  // Fallback states for images
-  const [trainImgError, setTrainImgError] = useState(false);
-  const [bgImgError, setBgImgError] = useState(false);
-  const [blockImgError, setBlockImgError] = useState(false);
+  // Auto-resolved map background texture (supports bg_map_texture.jpg or .png)
+  const { resolvedUrl: bgTextureUrl } = useResolvedImage(PUBLIC_ASSETS.images.bgMapTexture);
 
   // Dynamic Altitude Meter state
   const [currentElevation, setCurrentElevation] = useState<number>(402.326);
   const [currentNearestName, setCurrentNearestName] = useState<string>('勝興車站');
 
   // Dynamic Block Section tracking state
-  const [currentSectionIndex, setCurrentSectionIndex] = useState<number>(1); // Default to section 2 (Shengxing)
+  const [currentSectionIndex, setCurrentSectionIndex] = useState<number>(1);
+  const prevSectionIndexRef = useRef<number>(1);
+  const hasInitializedScrollRef = useRef<boolean>(false);
 
   // DOM Refs
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapCanvasRef = useRef<HTMLDivElement | null>(null);
+  const activeRouteRef = useRef<HTMLDivElement | null>(null);
 
-  // Shengxing Station reference object
-  const shengxingObj = useMemo(
-    () => objects.find((o) => o.id === 'shengxing') ?? objects[2],
-    [objects]
-  );
+  // Drag-to-pan state for desktop mouse dragging
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
   // Active Block Section
   const activeBlockSection: BlockSection = useMemo(() => {
     return BLOCK_SECTIONS[currentSectionIndex] || BLOCK_SECTIONS[1];
   }, [currentSectionIndex]);
 
-  // Auto-detect window orientation if not manually overridden
+  // Half-viewport padding ensures scroll=0 centers 三義 (t=0) and maxScroll centers 豐原 (t=1)
+  const halfW = Math.round(viewportSize.width / 2);
+  const halfH = Math.round(viewportSize.height / 2);
+
+  const canvasWidth = isLandscape
+    ? ROUTE_LENGTH_LANDSCAPE + viewportSize.width
+    : Math.max(360, viewportSize.width);
+  const canvasHeight = isLandscape
+    ? Math.max(460, viewportSize.height)
+    : ROUTE_LENGTH_PORTRAIT + viewportSize.height;
+
+  // Observe container dimensions and window orientation
   useEffect(() => {
-    const handleResize = () => {
-      if (userToggledOrientationRef.current) return;
-      const landscape = window.innerWidth > window.innerHeight;
-      setIsLandscape(landscape);
+    const container = scrollContainerRef.current;
+    const updateSize = () => {
+      if (container) {
+        const w = container.clientWidth || window.innerWidth;
+        const h = container.clientHeight || Math.max(480, window.innerHeight - 64);
+        setViewportSize({ width: w, height: h });
+      }
+      setIsLandscape(window.innerWidth > window.innerHeight);
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    updateSize();
+    const observer =
+      typeof ResizeObserver !== 'undefined' && container
+        ? new ResizeObserver(() => updateSize())
+        : null;
+    if (observer && container) {
+      observer.observe(container);
+    }
+    window.addEventListener('resize', updateSize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, []);
 
-  // Center scroll on Shengxing Station
+  // Center scroll on Shengxing Station (t = 0.36)
   const centerOnShengxing = useCallback(
     (smooth = true) => {
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const pos = isLandscape ? shengxingObj.landscapePos : shengxingObj.portraitPos;
-
+      const shengxingT = 0.36;
       if (isLandscape) {
-        const scrollWidth = container.scrollWidth;
-        const clientWidth = container.clientWidth;
-        const targetX = (pos.x / 100) * scrollWidth - clientWidth / 2;
         container.scrollTo({
-          left: Math.max(0, targetX),
+          left: Math.round(shengxingT * ROUTE_LENGTH_LANDSCAPE),
           behavior: smooth ? 'smooth' : 'auto',
         });
       } else {
-        const scrollHeight = container.scrollHeight;
-        const clientHeight = container.clientHeight;
-        const targetY = (pos.y / 100) * scrollHeight - clientHeight / 2;
         container.scrollTo({
-          top: Math.max(0, targetY),
+          top: Math.round(shengxingT * ROUTE_LENGTH_PORTRAIT),
           behavior: smooth ? 'smooth' : 'auto',
         });
       }
 
+      setScrollProgress(shengxingT);
       setCurrentElevation(402.326);
       setCurrentNearestName('勝興車站');
-      setCurrentSectionIndex(1); // Shengxing section
+      prevSectionIndexRef.current = 1;
+      setCurrentSectionIndex(1);
     },
-    [isLandscape, shengxingObj]
+    [isLandscape]
   );
 
-  // Initial auto-centering on mount
+  // Initial auto-centering on mount & orientation switch
   useEffect(() => {
     const timer = setTimeout(() => {
       centerOnShengxing(false);
-    }, 120);
-    return () => clearTimeout(timer);
-  }, [centerOnShengxing]);
-
-  // Center when orientation changes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      centerOnShengxing(true);
-    }, 150);
+      hasInitializedScrollRef.current = true;
+    }, 80);
     return () => clearTimeout(timer);
   }, [isLandscape, centerOnShengxing]);
 
@@ -165,54 +223,83 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [isLandscape]);
 
-  // Dynamic Altitude Meter & Block Section tracking via scroll
+  // Dynamic Train Tracking, Altitude Meter & Block Section via scroll
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    // Viewport center percentage
-    let centerPercent = 50;
-    if (isLandscape) {
-      const scrollLeft = container.scrollLeft;
-      const scrollWidth = container.scrollWidth;
-      const clientWidth = container.clientWidth;
-      centerPercent = ((scrollLeft + clientWidth / 2) / scrollWidth) * 100;
-    } else {
-      const scrollTop = container.scrollTop;
-      const scrollHeight = container.scrollHeight;
-      const clientHeight = container.clientHeight;
-      centerPercent = ((scrollTop + clientHeight / 2) / scrollHeight) * 100;
-    }
+    const rawT = isLandscape
+      ? container.scrollLeft / ROUTE_LENGTH_LANDSCAPE
+      : container.scrollTop / ROUTE_LENGTH_PORTRAIT;
+    const clampedT = Math.max(0, Math.min(1, rawT));
+    const percent = clampedT * 100;
 
-    // 1. Find nearest station/object to current viewport center
-    let closestObj = objects[0];
-    let minDiff = 9999;
+    setScrollProgress(clampedT);
+    setCurrentElevation(getElevationAtProgress(clampedT));
 
-    objects.forEach((obj) => {
-      if (obj.isSignpost) return; // skip signposts for elevation meter
-      const objPercent = isLandscape ? obj.landscapePos.x : obj.portraitPos.y;
-      const diff = Math.abs(objPercent - centerPercent);
+    // Find nearest station exclusively among the 5 stations along the route
+    let closestStation: (typeof ROUTE_MILESTONES)[number] = ROUTE_MILESTONES[0];
+    let minDiff = Infinity;
+    for (const station of ROUTE_MILESTONES) {
+      const diff = Math.abs(station.t - clampedT);
       if (diff < minDiff) {
         minDiff = diff;
-        closestObj = obj;
+        closestStation = station;
       }
-    });
-
-    if (closestObj) {
-      setCurrentElevation(closestObj.elevation);
-      setCurrentNearestName(closestObj.name);
     }
+    setCurrentNearestName(closestStation.label);
 
-    // 2. Track Block Section dynamically
+    // Track Block Section dynamically & ring block bell on section transition
     const matchedSecIdx = BLOCK_SECTIONS.findIndex((sec) => {
       const range = isLandscape ? sec.rangeLandscape : sec.rangePortrait;
-      return centerPercent >= range[0] && centerPercent < range[1];
+      return percent >= range[0] && percent < range[1];
     });
 
-    if (matchedSecIdx !== -1) {
+    if (matchedSecIdx !== -1 && matchedSecIdx !== prevSectionIndexRef.current) {
+      prevSectionIndexRef.current = matchedSecIdx;
       setCurrentSectionIndex(matchedSecIdx);
+      if (hasInitializedScrollRef.current) {
+        soundEngine.playBlockBell();
+      }
     }
   }, [isLandscape, objects]);
+
+  // Desktop click-and-drag panning on map background
+  const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDebugMode || e.button !== 0) return;
+    // Ignore clicks on interactive objects/buttons
+    if ((e.target as HTMLElement).closest('[data-map-interactive="true"]')) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    isPanningRef.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isPanningRef.current || !scrollContainerRef.current) return;
+      if (isLandscape) {
+        const dx = moveEvent.clientX - panStartRef.current.x;
+        scrollContainerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+      } else {
+        const dy = moveEvent.clientY - panStartRef.current.y;
+        scrollContainerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+      }
+    };
+
+    const handleMouseUp = () => {
+      isPanningRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Keyboard shortcut listener: 'D' key toggles Debug mode
   useEffect(() => {
@@ -234,46 +321,39 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
       } else if (e.key === 'Escape') {
         if (activeStoryObject) setActiveStoryObject(null);
         if (isDaterOpen) setIsDaterOpen(false);
-        if (isBlockModalOpen) setIsBlockModalOpen(false);
         if (isDebugMode) setIsDebugMode(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDebugMode, activeStoryObject, isDaterOpen, isBlockModalOpen]);
+  }, [isDebugMode, activeStoryObject, isDaterOpen]);
 
-  // Drag and drop handler in Debug mode
+  // Drag and drop handler in Debug mode (relative to the active route container 0..100%)
   const handlePointerDown = (e: React.PointerEvent, objId: string) => {
     if (!isDebugMode) return;
     e.stopPropagation();
     e.preventDefault();
     setDraggingId(objId);
 
-    const canvas = mapCanvasRef.current;
-    if (!canvas) return;
+    const routeBox = activeRouteRef.current;
+    if (!routeBox) return;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
+      const rect = routeBox.getBoundingClientRect();
       const rawX = ((moveEvent.clientX - rect.left) / rect.width) * 100;
       const rawY = ((moveEvent.clientY - rect.top) / rect.height) * 100;
 
-      const clampedX = Math.round(Math.max(1, Math.min(99, rawX)) * 10) / 10;
-      const clampedY = Math.round(Math.max(1, Math.min(99, rawY)) * 10) / 10;
+      const clampedX = Math.round(Math.max(0, Math.min(100, rawX)) * 10) / 10;
+      const clampedY = Math.round(Math.max(5, Math.min(95, rawY)) * 10) / 10;
 
       setObjects((prev) =>
         prev.map((item) => {
           if (item.id !== objId) return item;
           if (isLandscape) {
-            return {
-              ...item,
-              landscapePos: { x: clampedX, y: clampedY },
-            };
+            return { ...item, landscapePos: { x: clampedX, y: clampedY } };
           }
-          return {
-            ...item,
-            portraitPos: { x: clampedX, y: clampedY },
-          };
+          return { ...item, portraitPos: { x: clampedX, y: clampedY } };
         })
       );
     };
@@ -310,41 +390,53 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
     setTimeout(() => setCopyFeedback(null), 2500);
   };
 
-  // Click on train head: play whistle sound
-  const handleTrainClick = (trainObj: MapObject) => {
+  // Click on centered train head: play whistle sound & open ⑫ 莒光號列車正面 modal
+  const handleTrainClick = () => {
     soundEngine.playTrainWhistle();
-    setActiveStoryObject(trainObj);
+    setActiveStoryObject(TRAIN_167_OBJECT);
   };
 
-  // Generate SVG path for the central black-and-white railway track
-  const trackPathD = useMemo(() => {
-    // Only track stations along the main spine (excluding off-track signs and special icons)
-    const spineIds = [
-      'sanyi',
-      'tunnel-1',
-      'shengxing',
-      'tunnel-2',
-      'longteng',
-      'tunnel-group',
-      'daan-bridge',
-      'taian',
-      'houli',
-      'fengyuan',
-    ];
+  // Compute exact pixel-coordinate SVG paths for the main track + faded north/south extensions
+  const trackGeometry = useMemo(() => {
+    const steps = 80;
+    const activePoints: string[] = [];
 
-    const lineStations = spineIds
-      .map((id) => objects.find((o) => o.id === id))
-      .filter((o): o is MapObject => Boolean(o));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const crossFrac = getTrackCrossPercent(t) / 100;
+      if (isLandscape) {
+        const px = halfW + t * ROUTE_LENGTH_LANDSCAPE;
+        const py = crossFrac * canvasHeight;
+        activePoints.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+      } else {
+        const px = crossFrac * canvasWidth;
+        const py = halfH + t * ROUTE_LENGTH_PORTRAIT;
+        activePoints.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+      }
+    }
 
-    if (lineStations.length === 0) return '';
+    const activePathD = `M ${activePoints.join(' L ')}`;
 
-    const points = lineStations.map((st) => {
-      const pos = isLandscape ? st.landscapePos : st.portraitPos;
-      return `${pos.x},${pos.y}`;
+    const northExtensionD = isLandscape
+      ? `M 0,${(canvasHeight * 0.5).toFixed(1)} L ${halfW},${(canvasHeight * 0.5).toFixed(1)}`
+      : `M ${(canvasWidth * 0.5).toFixed(1)},0 L ${(canvasWidth * 0.5).toFixed(1)},${halfH}`;
+
+    const southExtensionD = isLandscape
+      ? `M ${halfW + ROUTE_LENGTH_LANDSCAPE},${(canvasHeight * 0.5).toFixed(1)} L ${canvasWidth},${(canvasHeight * 0.5).toFixed(1)}`
+      : `M ${(canvasWidth * 0.5).toFixed(1)},${halfH + ROUTE_LENGTH_PORTRAIT} L ${(canvasWidth * 0.5).toFixed(1)},${canvasHeight}`;
+
+    const milestonePoints = ROUTE_MILESTONES.map((m) => {
+      const crossFrac = getTrackCrossPercent(m.t) / 100;
+      return isLandscape
+        ? { x: halfW + m.t * ROUTE_LENGTH_LANDSCAPE, y: crossFrac * canvasHeight, label: m.label }
+        : { x: crossFrac * canvasWidth, y: halfH + m.t * ROUTE_LENGTH_PORTRAIT, label: m.label };
     });
 
-    return `M ${points.join(' L ')}`;
-  }, [isLandscape, objects]);
+    return { activePathD, northExtensionD, southExtensionD, milestonePoints };
+  }, [isLandscape, halfW, halfH, canvasWidth, canvasHeight]);
+
+  // Current cross-axis percent for the viewport-centered 莒光號列車
+  const trainCrossPercent = getTrackCrossPercent(scrollProgress);
 
   return (
     <div className="relative w-full h-full bg-[#2b231d] text-[#FCFAF2] overflow-hidden select-none">
@@ -418,48 +510,68 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
         </>
       ) : (
         <>
-          <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84]">
+          <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap">
             <span>↑ 北 · 三義起點</span>
           </div>
-          <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84]">
+          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap">
             <span>↓ 南 · 豐原終點</span>
           </div>
         </>
       )}
 
+      {/* ================= ⑫ CENTERED MOVING TRAIN (保持畫面中心 · 隨滑動沿鐵軌行駛) ================= */}
+      <div
+        className="pointer-events-none absolute inset-0 z-25 overflow-hidden"
+        aria-live="off"
+      >
+        <button
+          type="button"
+          data-map-interactive="true"
+          onClick={handleTrainClick}
+          title="莒光號列車正面（點擊鳴笛並閱讀列車故事）"
+          className="pointer-events-auto group absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-115 active:scale-95 drop-shadow-[0_6px_16px_rgba(0,0,0,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFBA84]"
+          style={
+            isLandscape
+              ? { left: '50%', top: `${trainCrossPercent}%` }
+              : { left: `${trainCrossPercent}%`, top: '50%' }
+          }
+        >
+          <MapIconImage
+            iconFile={TRAIN_167_OBJECT.mapIcon || PUBLIC_ASSETS.images.uiTrain167}
+            alt="莒光號列車正面"
+            className="w-14 h-14 sm:w-16 sm:h-16 object-contain filter contrast-110"
+            fallback={
+              <div className="relative flex items-center justify-center w-12 h-12 rounded-full bg-[#F05E1C] border-2 border-[#FFBA84] text-[#FCFAF2] shadow-[0_0_20px_rgba(240,94,28,0.85)] group-hover:bg-[#d85014] transition-colors">
+                <TrainFront className="w-6 h-6 text-[#FCFAF2]" aria-hidden="true" />
+              </div>
+            }
+          />
+        </button>
+      </div>
+
       {/* ================= SCROLLABLE MAP VIEWPORT ================= */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className={`w-full h-full overflow-auto ${
+        onMouseDown={handleContainerMouseDown}
+        className={`w-full h-full ${
           isLandscape ? 'overflow-x-auto overflow-y-hidden' : 'overflow-y-auto overflow-x-hidden'
-        } scroll-smooth cursor-grab active:cursor-grabbing`}
+        } cursor-grab active:cursor-grabbing`}
       >
-        {/* Map Canvas with Vintage Earth-Brown Background */}
+        {/* Full Map Canvas (Active Route + Half-Viewport Faded North & South Track Extensions) */}
         <div
-          ref={mapCanvasRef}
-          className="relative transition-all duration-300"
+          className="relative"
           style={{
-            width: isLandscape ? '3400px' : '100%',
-            minWidth: isLandscape ? '3400px' : '380px',
-            height: isLandscape ? '100%' : '2600px',
-            minHeight: isLandscape ? '580px' : '2600px',
+            width: `${canvasWidth}px`,
+            height: `${canvasHeight}px`,
             backgroundColor: '#2b231d',
-            backgroundImage: bgImgError
-              ? 'radial-gradient(circle at 50% 50%, #46392f 0%, #2f251d 55%, #18120e 100%)'
-              : 'url("/images/bg_map_texture.jpg"), radial-gradient(circle at 50% 50%, #46392f 0%, #2f251d 55%, #18120e 100%)',
+            backgroundImage: bgTextureUrl
+              ? `url("${bgTextureUrl}"), radial-gradient(circle at 50% 50%, #46392f 0%, #2f251d 55%, #18120e 100%)`
+              : 'radial-gradient(circle at 50% 50%, #46392f 0%, #2f251d 55%, #18120e 100%)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}
         >
-          {/* Pre-reserved background image error detector */}
-          <img
-            src="/images/bg_map_texture.jpg"
-            alt=""
-            className="hidden"
-            onError={() => setBgImgError(true)}
-          />
-
           {/* Archival Topographic Contour & Surveyor Grid Overlay */}
           <div
             aria-hidden="true"
@@ -475,337 +587,404 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
             }}
           />
 
-          {/* Central Black-and-White Railway Track (SVG) */}
+          {/* ================= CONTINUOUS RAILWAY TRACK SVG (含北端三義外＆南端豐原外淡色延伸) ================= */}
           <svg
             className="pointer-events-none absolute inset-0 w-full h-full z-10"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
+            viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
           >
             <defs>
-              <filter id="track-shadow" x="-10%" y="-10%" width="120%" height="120%">
-                <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#0C0C0C" floodOpacity="0.8" />
+              <filter id="track-shadow" x="-5%" y="-5%" width="110%" height="110%">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0C0C0C" floodOpacity="0.8" />
               </filter>
+
+              {/* North faded extension gradient (fades smoothly from outer edge to Sanyi) */}
+              <linearGradient
+                id="north-ext-fade"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1="0"
+                x2={isLandscape ? halfW : 0}
+                y2={isLandscape ? 0 : halfH}
+              >
+                <stop offset="0%" stopColor="#9B9085" stopOpacity="0.06" />
+                <stop offset="65%" stopColor="#B8ACA0" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="#D6CBC0" stopOpacity="0.38" />
+              </linearGradient>
+
+              {/* South faded extension gradient (fades smoothly from Fengyuan to outer edge) */}
+              <linearGradient
+                id="south-ext-fade"
+                gradientUnits="userSpaceOnUse"
+                x1={isLandscape ? halfW + ROUTE_LENGTH_LANDSCAPE : 0}
+                y1={isLandscape ? 0 : halfH + ROUTE_LENGTH_PORTRAIT}
+                x2={isLandscape ? canvasWidth : 0}
+                y2={isLandscape ? 0 : canvasHeight}
+              >
+                <stop offset="0%" stopColor="#D6CBC0" stopOpacity="0.38" />
+                <stop offset="35%" stopColor="#B8ACA0" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="#9B9085" stopOpacity="0.06" />
+              </linearGradient>
             </defs>
 
-            {/* Base ballast bed (charcoal black) */}
+            {/* --- 1. NORTH FADED CONTINUOUS EXTENSION (三義以北 · 較淡顏色不可再滑動) --- */}
             <path
-              d={trackPathD}
+              d={trackGeometry.northExtensionD}
+              fill="none"
+              stroke="url(#north-ext-fade)"
+              strokeWidth="10"
+              strokeLinecap="butt"
+              opacity="0.45"
+            />
+            <path
+              d={trackGeometry.northExtensionD}
+              fill="none"
+              stroke="url(#north-ext-fade)"
+              strokeWidth="5"
+              strokeDasharray="14 14"
+              strokeLinecap="butt"
+            />
+
+            {/* --- 2. SOUTH FADED CONTINUOUS EXTENSION (豐原以南 · 較淡顏色不可再滑動) --- */}
+            <path
+              d={trackGeometry.southExtensionD}
+              fill="none"
+              stroke="url(#south-ext-fade)"
+              strokeWidth="10"
+              strokeLinecap="butt"
+              opacity="0.45"
+            />
+            <path
+              d={trackGeometry.southExtensionD}
+              fill="none"
+              stroke="url(#south-ext-fade)"
+              strokeWidth="5"
+              strokeDasharray="14 14"
+              strokeLinecap="butt"
+            />
+
+            {/* --- 3. ACTIVE OLD MOUNTAIN LINE TRACK (三義 ⟷ 豐原) --- */}
+            {/* Base ballast bed */}
+            <path
+              d={trackGeometry.activePathD}
               fill="none"
               stroke="#0C0C0C"
-              strokeWidth={isLandscape ? '0.85' : '1.1'}
+              strokeWidth="14"
               strokeLinecap="round"
               strokeLinejoin="round"
               filter="url(#track-shadow)"
             />
 
-            {/* Rail foundation line (dark bronze-gray) */}
+            {/* Rail foundation line */}
             <path
-              d={trackPathD}
+              d={trackGeometry.activePathD}
               fill="none"
               stroke="#2d2621"
-              strokeWidth={isLandscape ? '0.65' : '0.85'}
+              strokeWidth="10"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
 
-            {/* Retro Black-and-White Railway Dash (classic cartographic railway symbol) */}
+            {/* Classic cartographic black-and-white railway dashes */}
             <path
-              d={trackPathD}
+              d={trackGeometry.activePathD}
               fill="none"
               stroke="#FCFAF2"
-              strokeWidth={isLandscape ? '0.42' : '0.55'}
-              strokeDasharray={isLandscape ? '1.2 1.2' : '1.5 1.5'}
+              strokeWidth="5.5"
+              strokeDasharray="16 14"
               strokeLinecap="butt"
               strokeLinejoin="round"
             />
+
+            {/* Subtle decorative station mileage nodes along the track (non-interactive) */}
+            {trackGeometry.milestonePoints.map((pt) => (
+              <g key={pt.label}>
+                <circle cx={pt.x} cy={pt.y} r="7" fill="#0C0C0C" stroke="#FFBA84" strokeWidth="2" />
+                <circle cx={pt.x} cy={pt.y} r="2.5" fill="#F05E1C" />
+              </g>
+            ))}
           </svg>
 
-          {/* ================= MAP OBJECTS ================= */}
-          {objects.map((obj) => {
-            const pos = isLandscape ? obj.landscapePos : obj.portraitPos;
-            const isDragging = draggingId === obj.id;
-            const isTrain = obj.id === 'train-167';
-            const isDater = obj.id === 'dater-machine';
-            const isSignpost = Boolean(obj.isSignpost);
-            const isStoryObject = Boolean(obj.hasStory);
-
-            return (
-              <div
-                key={obj.id}
-                onPointerDown={(e) => handlePointerDown(e, obj.id)}
-                onClick={() => {
-                  if (isDebugMode) return;
-
-                  if (isTrain) {
-                    handleTrainClick(obj);
-                  } else if (isDater) {
-                    soundEngine.playSelectClick();
-                    setIsDaterOpen(true);
-                  } else if (isStoryObject) {
-                    soundEngine.playSelectClick();
-                    setActiveStoryObject(obj);
-                    if (onSelectStation) onSelectStation(obj.id);
+          {/* ================= ACTIVE ROUTE CONTAINER (定位 11 個可點擊地圖物件) ================= */}
+          <div
+            ref={activeRouteRef}
+            className="absolute z-20"
+            style={
+              isLandscape
+                ? {
+                    left: `${halfW}px`,
+                    top: 0,
+                    width: `${ROUTE_LENGTH_LANDSCAPE}px`,
+                    height: `${canvasHeight}px`,
                   }
-                  // Note: isSignpost items do not trigger popups, as requested!
-                }}
-                className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                  isDebugMode
-                    ? 'cursor-move ring-2 ring-dashed ring-[#FFBA84] p-1.5 bg-[#0C0C0C]/85 backdrop-blur-xs rounded'
-                    : isSignpost
-                      ? 'cursor-default pointer-events-none'
-                      : 'cursor-pointer hover:scale-115 active:scale-95 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]'
-                } ${isDragging ? 'scale-125 z-40' : ''}`}
-                style={{
-                  left: `${pos.x}%`,
-                  top: `${pos.y}%`,
-                }}
-              >
-                {/* Debug Coordinate Label (Only in Debug Mode) */}
-                {isDebugMode && (
-                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-[#0C0C0C]/95 text-[#FFBA84] text-[10px] font-mono whitespace-nowrap border border-[#FFBA84] rounded-xs shadow-lg pointer-events-none z-30">
-                    {obj.id} ({pos.x}%, {pos.y}%)
-                  </div>
-                )}
+                : {
+                    left: 0,
+                    top: `${halfH}px`,
+                    width: `${canvasWidth}px`,
+                    height: `${ROUTE_LENGTH_PORTRAIT}px`,
+                  }
+            }
+          >
+            {objects.map((obj) => {
+              const pos = isLandscape ? obj.landscapePos : obj.portraitPos;
+              const isDragging = draggingId === obj.id;
+              const isDater = obj.id === 'dater-machine';
+              const isSignpost = Boolean(obj.isSignpost);
 
-                {/* --- CASE 1: 5 傳統月台站名牌 (純圖示 · 僅顯示不彈窗) --- */}
-                {isSignpost ? (
-                  <div
-                    className="flex flex-col items-center select-none drop-shadow-md"
-                    title={obj.name}
-                  >
-                    <div className="bg-[#FCFAF2] border-2 border-[#0B346E] px-2 py-0.5 text-center min-w-[56px] shadow-sm">
-                      <p className="text-[11px] font-serif font-bold tracking-[0.1em] text-[#0C0C0C]">
-                        {obj.shortName}
-                      </p>
+              return (
+                <div
+                  key={obj.id}
+                  data-map-interactive="true"
+                  onPointerDown={(e) => handlePointerDown(e, obj.id)}
+                  onClick={() => {
+                    if (isDebugMode) return;
+                    soundEngine.playSelectClick();
+                    if (isDater) {
+                      setIsDaterOpen(true);
+                    } else {
+                      setActiveStoryObject(obj);
+                      if (onSelectStation) onSelectStation(obj.id);
+                    }
+                  }}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                    isDebugMode
+                      ? 'cursor-move ring-2 ring-dashed ring-[#FFBA84] p-1.5 bg-[#0C0C0C]/85 backdrop-blur-xs rounded'
+                      : 'cursor-pointer hover:scale-115 active:scale-95 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]'
+                  } ${isDragging ? 'scale-125 z-40' : ''}`}
+                  style={{
+                    left: `${pos.x}%`,
+                    top: `${pos.y}%`,
+                  }}
+                >
+                  {/* Debug Coordinate Label (Only in Debug Mode) */}
+                  {isDebugMode && (
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-[#0C0C0C]/95 text-[#FFBA84] text-[10px] font-mono whitespace-nowrap border border-[#FFBA84] rounded-xs shadow-lg pointer-events-none z-30">
+                      {obj.id} ({pos.x}%, {pos.y}%)
                     </div>
-                    <div className="w-1 h-3 bg-[#423832]" />
-                  </div>
-                ) : isDater ? (
-                  /* --- CASE 2: 軋日機圖示 (純圖示 · 點擊開啟軋日儀式) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="勝興軋日機（點擊壓印車票）"
-                  >
-                    <div className="relative flex items-center justify-center w-11 h-11 rounded-sm bg-[#1A251E] border-2 border-[#FFBA84] text-[#FFBA84] shadow-[0_4px_16px_rgba(0,0,0,0.85)] group-hover:border-[#F05E1C] group-hover:bg-[#25362b] transition-all">
-                      <Stamp className="w-5 h-5 text-[#FFBA84]" aria-hidden="true" />
-                      {/* Pulsing indicator */}
-                      <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F05E1C] opacity-80" />
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F05E1C]" />
-                      </span>
-                    </div>
-                  </div>
-                ) : isTrain ? (
-                  /* --- CASE 3: 167 次車頭圖示 (純圖示 · 點擊鳴笛並檢視列車故事) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="莒光 167 次車頭（點擊鳴笛）"
-                  >
-                    {!trainImgError ? (
-                      <div className="relative">
-                        <img
-                          src="/images/ui_train_167.png"
-                          alt="莒光 167 次車頭"
-                          onError={() => setTrainImgError(true)}
-                          className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)] filter contrast-110"
-                        />
-                        <div
-                          aria-hidden="true"
-                          className="pointer-events-none absolute inset-0 rounded-full bg-[#F05E1C]/25 animate-ping opacity-60"
-                        />
-                      </div>
-                    ) : (
-                      <div className="relative flex items-center justify-center w-11 h-11 rounded-full bg-[#F05E1C] border-2 border-[#FFBA84] text-[#FCFAF2] shadow-[0_4px_14px_rgba(0,0,0,0.8)] group-hover:bg-[#d85014] transition-colors">
-                        <TrainFront className="w-5 h-5 text-[#FCFAF2]" aria-hidden="true" />
-                      </div>
-                    )}
-                  </div>
-                ) : obj.id === 'shengxing' ? (
-                  /* --- CASE 4: 勝興車站 (純圖示 · 最高點 402.326m 故事物件) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="勝興車站 · 402.326m（點擊閱讀故事）"
-                  >
+                  )}
+
+                  {/* --- ①–⑤ 各站站牌（可點擊開啟彈窗 · sign_*.png / .jpg） --- */}
+                  {isSignpost ? (
                     <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute -inset-2 rounded-full bg-[#F05E1C]/25 animate-pulse"
-                    />
-                    <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-[#FCFAF2] border-3 border-[#0C0C0C] shadow-[0_0_16px_rgba(240,94,28,0.85)] group-hover:scale-110 transition-transform">
-                      <div className="w-3.5 h-3.5 rounded-full bg-[#F05E1C]" />
+                      className="flex flex-col items-center select-none drop-shadow-md"
+                      title={`${obj.name}（點擊閱讀介紹）`}
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-18 h-auto sm:w-22 object-contain drop-shadow-[0_3px_10px_rgba(0,0,0,0.8)]"
+                        fallback={
+                          <>
+                            <div className="bg-[#FCFAF2] border-2 border-[#0B346E] px-2.5 py-1 text-center min-w-[60px] shadow-md">
+                              <p className="text-[11px] font-serif font-bold tracking-[0.12em] text-[#0C0C0C]">
+                                {obj.shortName}
+                              </p>
+                            </div>
+                            <div className="w-1 h-3 bg-[#423832]" />
+                          </>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : obj.id === 'switchback-track' ? (
-                  /* --- CASE 5: 折返式軌道 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="勝興折返式軌道 · 防衝安全側線（點擊閱讀故事）"
-                  >
-                    <div className="flex items-center justify-center w-7 h-7 rounded bg-[#3A2A1E] border border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:bg-[#4E3726] transition-colors">
-                      <Layers className="w-4 h-4 text-[#FFBA84]" aria-hidden="true" />
+                  ) : isDater ? (
+                    /* --- ⑪ 軋日機（點擊開啟軋日儀式 · icon_sx_dater.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title="軋日機（點擊壓印紀念車票）"
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-13 h-13 sm:w-15 sm:h-15 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <div className="relative flex items-center justify-center w-11 h-11 rounded-sm bg-[#1A251E] border-2 border-[#FFBA84] text-[#FFBA84] shadow-[0_4px_16px_rgba(0,0,0,0.85)] group-hover:border-[#F05E1C] group-hover:bg-[#25362b] transition-all">
+                            <Stamp className="w-5 h-5 text-[#FFBA84]" aria-hidden="true" />
+                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F05E1C] opacity-80" />
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F05E1C]" />
+                            </span>
+                          </div>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : obj.id === 'elevation-monument' ? (
-                  /* --- CASE 6: 402.326m 紀念碑 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="402.326m 紀念碑（點擊閱讀故事）"
-                  >
-                    <div className="flex items-center justify-center w-7 h-7 bg-[#242322] border-2 border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:border-[#F05E1C] transition-colors">
-                      <span className="text-[10px] font-serif font-bold">碑</span>
+                  ) : obj.id === 'shengxing' ? (
+                    /* --- ⑥ 勝興木造車站（icon_sx_station.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title="勝興木造車站 · 402.326m（點擊閱讀故事）"
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-16 h-16 sm:w-18 sm:h-18 object-contain drop-shadow-[0_4px_14px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <>
+                            <div
+                              aria-hidden="true"
+                              className="pointer-events-none absolute -inset-2 rounded-full bg-[#F05E1C]/25 animate-pulse"
+                            />
+                            <div className="relative flex items-center justify-center w-9 h-9 rounded-full bg-[#FCFAF2] border-3 border-[#0C0C0C] shadow-[0_0_16px_rgba(240,94,28,0.85)] group-hover:scale-110 transition-transform">
+                              <div className="w-4 h-4 rounded-full bg-[#F05E1C]" />
+                            </div>
+                          </>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : obj.id === 'camphor-lodge' ? (
-                  /* --- CASE 7: 樟腦寮 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title="十六份樟腦寮（點擊閱讀故事）"
-                  >
-                    <div className="flex items-center justify-center w-7 h-7 rounded-sm bg-[#1E3022] border border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:bg-[#28422E] transition-colors">
-                      <span className="text-[11px] font-serif">寮</span>
+                  ) : obj.id === 'switchback-track' ? (
+                    /* --- ⑦ 折返式軌道與加掛補機（icon_sx_switchback.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title="折返式軌道與加掛補機（點擊閱讀故事）"
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-13 h-13 sm:w-15 sm:h-15 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <div className="flex items-center justify-center w-8 h-8 rounded bg-[#3A2A1E] border border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:bg-[#4E3726] transition-colors">
+                            <Layers className="w-4 h-4 text-[#FFBA84]" aria-hidden="true" />
+                          </div>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : obj.type === 'station' ? (
-                  /* --- CASE 8: 其他車站 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title={`${obj.name}（點擊閱讀故事）`}
-                  >
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#FCFAF2] border-2 border-[#0C0C0C] shadow-md group-hover:border-[#FFBA84] transition-colors">
-                      <div className="w-2.5 h-2.5 rounded-full bg-[#0B346E]" />
+                  ) : obj.id === 'elevation-monument' ? (
+                    /* --- ⑨ 海拔 402.326m 紀念碑（icon_sx_monument.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title="海拔 402.326m 紀念碑（點擊閱讀故事）"
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <div className="flex items-center justify-center w-8 h-8 bg-[#242322] border-2 border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:border-[#F05E1C] transition-colors">
+                            <span className="text-[11px] font-serif font-bold">碑</span>
+                          </div>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : obj.type === 'bridge' ? (
-                  /* --- CASE 9: 橋樑 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title={`${obj.name}（點擊閱讀故事）`}
-                  >
-                    <div className="flex items-center justify-center w-6 h-6 rounded bg-[#6E2E1D] border border-[#FFBA84] text-[#FCFAF2] shadow-md group-hover:bg-[#8D3A25] transition-colors">
-                      <span className="text-[10px] font-serif">橋</span>
+                  ) : obj.id === 'camphor-lodge' ? (
+                    /* --- ⑩ 樟腦寮（icon_sx_camphor.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title="樟腦寮（點擊閱讀故事）"
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-13 h-13 sm:w-15 sm:h-15 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <div className="flex items-center justify-center w-8 h-8 rounded-sm bg-[#1E3022] border border-[#FFBA84] text-[#FFBA84] shadow-md group-hover:bg-[#28422E] transition-colors">
+                            <span className="text-[11px] font-serif">寮</span>
+                          </div>
+                        }
+                      />
                     </div>
-                  </div>
-                ) : (
-                  /* --- CASE 10: 隧道 (純圖示) --- */
-                  <div
-                    className="group relative flex items-center justify-center"
-                    title={`${obj.name}（點擊閱讀故事）`}
-                  >
-                    <div className="flex items-center justify-center w-5 h-5 rounded-t-full bg-[#1A1816] border border-[#FCFAF2]/30 text-[#FCFAF2] shadow-md group-hover:border-[#FFBA84] transition-colors">
-                      <span className="text-[9px] font-serif text-[#FFBA84]">洞</span>
+                  ) : (
+                    /* --- ⑧ 開天隧道口與警總哨亭（icon_sx_tunnel.png / .jpg） --- */
+                    <div
+                      className="group relative flex items-center justify-center"
+                      title={`${obj.name}（點擊閱讀故事）`}
+                    >
+                      <MapIconImage
+                        iconFile={obj.mapIcon}
+                        alt={obj.name}
+                        className="w-13 h-13 sm:w-15 sm:h-15 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+                        fallback={
+                          <div className="flex items-center justify-center w-8 h-8 rounded-t-full bg-[#1A1816] border border-[#FFBA84]/70 text-[#FCFAF2] shadow-md group-hover:border-[#F05E1C] transition-colors">
+                            <span className="text-[10px] font-serif text-[#FFBA84]">洞</span>
+                          </div>
+                        }
+                      />
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* ================= CORNER 1: DYNAMIC ALTIMETER (左下角 海拔高度計) ================= */}
-      <div className="absolute bottom-5 left-5 z-30 bg-[#0C0C0C]/90 backdrop-blur-md border border-[#FFBA84]/35 shadow-2xl p-3.5 sm:p-4 text-[#FCFAF2] max-w-[250px]">
-        <div className="flex items-center justify-between gap-3 text-[10px] tracking-[0.2em] text-[#FFBA84] border-b border-[#FCFAF2]/15 pb-1.5 mb-2">
-          <span>舊山線 海拔高度計</span>
-          <span className="font-mono">ALTIMETER</span>
+      {/* ================= CORNER 1: DYNAMIC ALTIMETER (貼齊視窗左側 · 海拔高度) ================= */}
+      <div
+        className={`absolute left-0 z-30 flex flex-col justify-between overflow-hidden bg-[#0C0C0C]/90 backdrop-blur-md border border-l-0 border-[#FFBA84]/35 shadow-2xl text-[#FCFAF2] ${
+          isLandscape
+            ? 'bottom-5 w-[172px] h-[94px] px-3 py-2.5'
+            : 'bottom-14 w-[124px] h-[80px] px-2.5 py-2'
+        }`}
+      >
+        <div className="text-[10px] leading-none tracking-[0.18em] text-[#FFBA84] border-b border-[#FCFAF2]/15 pb-1">
+          <span>海拔高度</span>
         </div>
 
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl sm:text-3xl font-mono tabular-nums font-semibold tracking-tight text-[#FFBA84]">
-              {currentElevation.toFixed(currentElevation % 1 !== 0 ? 3 : 1)}
-            </span>
-            <span className="text-xs font-mono text-[#FCFAF2]/70">公尺</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              centerOnShengxing(true);
-              soundEngine.playSelectClick();
-            }}
-            className="text-[10px] px-2 py-0.5 border border-[#F05E1C] text-[#FFBA84] hover:bg-[#F05E1C] hover:text-[#FCFAF2] transition-colors cursor-pointer whitespace-nowrap"
-            title="視角置中至勝興最高點 (402.326m)"
+        <div className="flex items-baseline gap-1 leading-none">
+          <span
+            className={`font-mono tabular-nums font-semibold tracking-tight text-[#FFBA84] ${
+              isLandscape ? 'text-xl' : 'text-[15px]'
+            }`}
           >
-            勝興最高點
-          </button>
-        </div>
-
-        <div className="mt-2 pt-2 border-t border-[#FCFAF2]/10 flex items-center justify-between text-[11px] text-[#FCFAF2]/75">
-          <span className="truncate">鄰近：{currentNearestName}</span>
-          <span className="text-[10px] font-mono text-[#F05E1C] shrink-0">
-            坡度 25‰
+            {currentElevation === 402.326
+              ? '402.326'
+              : currentElevation.toFixed(1)}
+          </span>
+          <span
+            className={`font-mono text-[#FCFAF2]/70 ${
+              isLandscape ? 'text-[11px]' : 'text-[10px]'
+            }`}
+          >
+            公尺
           </span>
         </div>
+
+        <div className="pt-1 border-t border-[#FCFAF2]/10 text-[10px] leading-none text-[#FCFAF2]/75">
+          <span className="block truncate">鄰近：{currentNearestName}</span>
+        </div>
       </div>
 
-      {/* ================= CORNER 2: FIXED BLOCK INSTRUMENT (右下角 電氣路牌閉塞器) ================= */}
-      {/* Non-blocking pointer events on wrapper, active click on button */}
-      <div className="pointer-events-none absolute bottom-5 right-5 z-30 flex flex-col items-end">
-        <button
-          type="button"
-          onClick={() => {
-            soundEngine.playSelectClick();
-            setIsBlockModalOpen(true);
-          }}
-          className="pointer-events-auto group bg-[#0C0C0C]/90 hover:bg-[#0C0C0C] backdrop-blur-md border-2 border-[#0B346E] hover:border-[#FFBA84] p-3 shadow-2xl text-left transition-all duration-200 cursor-pointer max-w-[280px]"
-          title="點擊展開單軌電氣路牌閉塞器科普卡片"
-        >
-          {/* Header row with light and instrument label */}
-          <div className="flex items-center justify-between gap-3 pb-2 border-b border-[#FCFAF2]/15 text-[10px] tracking-[0.14em]">
-            <span className="text-[#FFBA84] font-serif">電氣路牌閉塞器</span>
-            <span className="font-mono text-[#FCFAF2]/50">BLOCK TOKEN</span>
-          </div>
-
-          <div className="mt-2.5 flex items-center gap-3">
-            {/* Visual Block Instrument Icon with Fallback */}
-            <div className="w-11 h-11 shrink-0 bg-[#251F1B] border border-[#FFBA84]/40 flex items-center justify-center overflow-hidden relative">
-              {!blockImgError ? (
-                <img
-                  src="/images/ui_block_instrument.png"
-                  alt="電氣路牌閉塞器"
-                  onError={() => setBlockImgError(true)}
-                  className="w-full h-full object-contain filter contrast-125"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-center p-1">
-                  <div className="w-4 h-4 rounded-full border-2 border-[#FFBA84] flex items-center justify-center text-[8px] font-bold text-[#FFBA84]">
-                    {activeBlockSection.tokenShape.split(' ')[1] || '○'}
-                  </div>
-                  <span className="text-[7px] font-mono text-[#FFBA84] mt-0.5">WEBB</span>
-                </div>
-              )}
+      {/* ================= CORNER 2: ⑬ FIXED BLOCK INSTRUMENT (右下角 電氣路牌閉塞器圖樣預留) ================= */}
+      <button
+        type="button"
+        onClick={() => {
+          soundEngine.playSelectClick();
+          setActiveStoryObject(BLOCK_INSTRUMENT_DATA);
+        }}
+        aria-label={`電氣路牌閉塞器（${
+          activeBlockSection.status === 'occupied' ? '列車佔用' : '區間開通'
+        }，點擊閱讀介紹）`}
+        title="電氣路牌閉塞器（點擊閱讀介紹）"
+        className="absolute bottom-5 right-5 z-30 group cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FFBA84]"
+      >
+        <MapIconImage
+          iconFile={PUBLIC_ASSETS.images.uiBlockInstrument}
+          alt="電氣路牌閉塞器"
+          className={`w-20 h-20 sm:w-24 sm:h-24 object-contain transition-all duration-300 ${
+            activeBlockSection.status === 'occupied'
+              ? 'block-graphic-img-occupied'
+              : 'block-graphic-img-clear'
+          }`}
+          fallback={
+            <div
+              className={`w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-[#0C0C0C]/75 backdrop-blur-xs border-2 border-dashed flex flex-col items-center justify-center text-center transition-all duration-300 ${
+                activeBlockSection.status === 'occupied'
+                  ? 'block-graphic-occupied'
+                  : 'block-graphic-clear'
+              }`}
+            >
+              <span
+                className={`w-3.5 h-3.5 rounded-full ${
+                  activeBlockSection.status === 'occupied'
+                    ? 'bg-[#EF4444] shadow-[0_0_12px_#EF4444]'
+                    : 'bg-[#4ADE80] shadow-[0_0_12px_#4ADE80]'
+                }`}
+              />
+              <span className="mt-1.5 text-[10px] tracking-[0.14em] text-[#FCFAF2]/80 font-serif">
+                閉塞器預留
+              </span>
             </div>
+          }
+        />
+      </button>
 
-            {/* Dynamic Status Display */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                    activeBlockSection.status === 'occupied'
-                      ? 'bg-[#E53935] animate-pulse shadow-[0_0_8px_#E53935]'
-                      : 'bg-[#43A047] shadow-[0_0_8px_#43A047]'
-                  }`}
-                />
-                <span className="text-xs font-serif text-[#FCFAF2] truncate font-medium">
-                  {activeBlockSection.name}
-                </span>
-              </div>
-
-              <div className="mt-1 flex items-center justify-between text-[10px] text-[#FCFAF2]/70 font-mono">
-                <span className={activeBlockSection.status === 'occupied' ? 'text-[#FF8A80]' : 'text-[#81C784]'}>
-                  {activeBlockSection.statusText}
-                </span>
-                <span className="text-[#FFBA84]">{activeBlockSection.tokenShape}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2 pt-1.5 border-t border-[#FCFAF2]/10 flex items-center justify-between text-[10px] text-[#FFBA84]/80">
-            <span>隨地圖滑動自動連鎖切換</span>
-            <span className="text-[#F05E1C] group-hover:underline">看科普卡片 →</span>
-          </div>
-        </button>
-      </div>
-
-      {/* ================= MODAL 1: 9 STORY OBJECTS (#FFBA84 CARD) ================= */}
+      {/* ================= MODAL 1: STORY OBJECTS (#FFBA84 CARD · 統一規格彈出視窗) ================= */}
       <StoryCardModal
         object={activeStoryObject}
         onClose={() => setActiveStoryObject(null)}
@@ -815,13 +994,6 @@ export function InteractiveMap({ onSelectStation }: InteractiveMapProps) {
       <TicketDaterModal
         isOpen={isDaterOpen}
         onClose={() => setIsDaterOpen(false)}
-      />
-
-      {/* ================= MODAL 3: BLOCK INSTRUMENT CARD (閉塞器科普卡片) ================= */}
-      <BlockInstrumentModal
-        isOpen={isBlockModalOpen}
-        onClose={() => setIsBlockModalOpen(false)}
-        activeSection={activeBlockSection}
       />
     </div>
   );
