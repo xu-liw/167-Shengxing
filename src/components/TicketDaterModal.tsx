@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Check, Download, RotateCcw, X } from 'lucide-react';
 import { PUBLIC_ASSETS, useResolvedImage } from '../utils/assetResolver';
 import { soundEngine } from '../utils/soundEngine';
@@ -293,57 +294,54 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
     setStampFeedback(null);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="dater-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#0C0C0C]/85 backdrop-blur-xs animate-stage-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-[#0C0C0C]/85 backdrop-blur-xs animate-stage-fade-in"
       onClick={onClose}
     >
       <div
-        className="relative bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-3xl max-h-[94vh] overflow-y-auto border-3 border-[#0B346E] shadow-2xl"
+        className="relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#0B346E] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Juguang Orange Double Stripe */}
-        <div className="h-3 bg-[#F05E1C]" />
-        <div className="h-1.5 bg-[#FFBA84]" />
+        <div className="h-3 bg-[#F05E1C] shrink-0" />
+        <div className="h-1.5 bg-[#FFBA84] shrink-0" />
 
-        {/* Modal Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="關閉軋日儀式"
-          className="absolute top-5 right-5 z-20 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2]/90 hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/15 cursor-pointer"
-        >
-          <X className="w-5 h-5" aria-hidden="true" />
-        </button>
-
-        <div className="p-6 sm:p-8">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-[#0C0C0C]/15">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-mono tracking-[0.16em] text-[#0B346E]">
-                <span>勝興車站 站務儀式</span>
-                <span aria-hidden="true">·</span>
-                <span className="text-[#F05E1C]">名片式車票壓印</span>
-              </div>
-              <h2
-                id="dater-modal-title"
-                className="mt-1 text-2xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
-              >
-                台鐵鑄鐵軋日機 · 壓印儀式
-              </h2>
+        {/* Always-Accessible Top Header with Close Button */}
+        <div className="shrink-0 flex items-start justify-between gap-3 px-5 sm:px-8 pt-4 pb-3 border-b border-[#0C0C0C]/15 bg-[#FCFAF2]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono tracking-[0.16em] text-[#0B346E]">
+              <span>勝興車站 站務儀式</span>
+              <span aria-hidden="true">·</span>
+              <span className="text-[#F05E1C]">名片式車票壓印</span>
             </div>
-            <span className="text-xs text-[#0C0C0C]/60 self-start sm:self-center font-mono">
-              1998 歷史重現
-            </span>
+            <h2
+              id="dater-modal-title"
+              className="mt-1 text-xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
+            >
+              台鐵鑄鐵軋日機 · 壓印儀式
+            </h2>
           </div>
 
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="關閉軋日儀式"
+            className="shrink-0 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2] hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/20 cursor-pointer"
+          >
+            <X className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-8 py-5 sm:py-6">
+
           {/* Operation Guide */}
-          <p className="mt-4 text-sm leading-[1.8] text-[#0C0C0C]/80">
+          <p className="text-sm leading-[1.8] text-[#0C0C0C]/80">
             昔日台鐵車站售票窗口均設有厚重的生鐵軋日機。售票員將硬紙卡車票插入機口、重重一壓，鋼字輪便會將出票日期以深紫色油墨深深壓印在票面上。請於下方選擇要壓印的歷史日期或今日日期：
           </p>
 
@@ -478,6 +476,7 @@ export function TicketDaterModal({ isOpen, onClose }: TicketDaterModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

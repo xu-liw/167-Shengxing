@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, Footprints, MapPin, X } from 'lucide-react';
 import { MapObject } from '../data/exhibitionData';
 import { ResilientImage } from './ResilientImage';
@@ -18,55 +19,57 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [object, onClose]);
 
-  if (!object) return null;
+  if (!object || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="story-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[#0C0C0C]/80 backdrop-blur-xs animate-stage-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-[#0C0C0C]/80 backdrop-blur-xs animate-stage-fade-in"
       onClick={onClose}
     >
       {/* #FFBA84 Warm Apricot Framed Card Modal */}
       <div
-        className="relative bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-2xl max-h-[92vh] overflow-y-auto border-3 border-[#FFBA84] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+        className="relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#FFBA84] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Apricot & Juguang Dual Accent Stripe */}
-        <div className="h-2.5 bg-[#FFBA84]" />
-        <div className="h-1 bg-[#F05E1C]" />
+        <div className="h-2.5 bg-[#FFBA84] shrink-0" />
+        <div className="h-1 bg-[#F05E1C] shrink-0" />
 
-        {/* Modal Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="關閉故事視窗"
-          className="absolute top-5 right-5 z-20 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2]/90 hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/15 cursor-pointer"
-        >
-          <X className="w-5 h-5" aria-hidden="true" />
-        </button>
-
-        <div className="p-6 sm:p-8">
-          {/* Top Milestones / Elevation Badges */}
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-[#0C0C0C]/70 pb-3 border-b border-[#0C0C0C]/15">
+        {/* Always-Accessible Modal Top Bar with Close Button */}
+        <div className="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-8 pt-4 pb-3 border-b border-[#0C0C0C]/15 bg-[#FCFAF2]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono tabular-nums text-[#0C0C0C]/70 min-w-0">
             <span className="text-[#F05E1C] font-semibold">{object.kmMark}</span>
             <span aria-hidden="true" className="text-[#0C0C0C]/30">·</span>
             <span>海拔 {object.elevationStr}</span>
-            <span aria-hidden="true" className="text-[#0C0C0C]/30">·</span>
-            <span className="font-serif text-[#0B346E]">舊山線文史導覽</span>
+            <span aria-hidden="true" className="hidden sm:inline text-[#0C0C0C]/30">·</span>
+            <span className="hidden sm:inline font-serif text-[#0B346E]">舊山線文史導覽</span>
           </div>
 
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="關閉故事視窗"
+            className="shrink-0 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2] hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/20 cursor-pointer"
+          >
+            <X className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Smoothly Scrollable Modal Body */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-8 py-5 sm:py-6">
           {/* Title */}
           <h2
             id="story-modal-title"
-            className="mt-3 text-2xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
+            className="text-2xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
           >
             {object.name}
           </h2>
 
           {/* 4:3 Image Container with Resilient Fallback */}
-          <div className="mt-5 aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18] shadow-sm relative">
+          <div className="mt-4 sm:mt-5 aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18] shadow-sm relative">
             <ResilientImage
               src={object.image || ''}
               fallbackSrc={object.fallbackImage}
@@ -87,7 +90,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
           </div>
 
           {/* Story Narrative (故事內文) */}
-          <div className="mt-6 space-y-3.5">
+          <div className="mt-5 sm:mt-6 space-y-3.5">
             <p className="text-base sm:text-[17px] font-medium leading-[1.8] text-[#0C0C0C]">
               {object.summary}
             </p>
@@ -136,6 +139,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

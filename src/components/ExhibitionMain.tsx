@@ -2,11 +2,9 @@ import { useMemo, useState } from 'react';
 import {
   BookOpen,
   ChevronDown,
+  ExternalLink,
   Footprints,
-  MapPin,
-  RotateCcw,
   Search,
-  Ticket,
   X,
 } from 'lucide-react';
 import {
@@ -29,15 +27,12 @@ interface ExhibitionMainProps {
 export function ExhibitionMain({
   activeTab,
   onSelectTab,
-  onReplayPrologue,
-  onOpenTicketMachine,
 }: ExhibitionMainProps) {
   const [, setSelectedStopId] = useState<string>('shengxing');
   const [expandedPlateId, setExpandedPlateId] = useState<string>(
     ARCHIVE_PLATES[0]?.id ?? ''
   );
   const [archiveQuery, setArchiveQuery] = useState<string>('');
-  const [expandedLinkId, setExpandedLinkId] = useState<string>('link-01');
 
   const filteredPlates = useMemo(() => {
     const trimmed = archiveQuery.trim().toLowerCase();
@@ -371,75 +366,62 @@ export function ExhibitionMain({
 
         {/* ================= TAB 4: 勝興連結 ================= */}
         {activeTab === 'links' && (
-          <div key="tab-links" className="animate-page-enter max-w-[1240px] mx-auto px-5 sm:px-8 py-12 lg:py-16">
+          <div key="tab-links" className="animate-page-enter max-w-[1040px] mx-auto px-5 sm:px-8 py-12 lg:py-16">
             <header className="pb-8 border-b border-[#0C0C0C]/15">
               <p className="text-xs tracking-[0.2em] text-[#F05E1C]">04. 勝興連結</p>
               <h1 className="mt-2 text-3xl sm:text-4xl tracking-[0.14em] font-normal text-[#0C0C0C]">
-                地方聚落、古蹟走讀與鐵道延伸資源
+                地方聚落與走讀資源
               </h1>
               <p className="mt-3 text-sm sm:text-base leading-[1.8] text-[#0C0C0C]/70 max-w-2xl">
-                從線上策展走回苗栗山城現場。以下整理勝興車站周邊聚落、舊山線重要鐵道遺構與鐵道文史保存資訊，作為實地踏查與延伸閱讀的起點。
+                從線上策展走回舊山線現場。歡迎點擊以下連結了解更多。
               </p>
             </header>
 
             <div className="mt-8 border-t border-[#0C0C0C]/15">
               {CULTURAL_LINKS.map((item, idx) => {
-                const isExpanded = expandedLinkId === item.id;
+                const hasUrl = Boolean(item.url);
+                const content = (
+                  <div className="py-6 px-3 -mx-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors hover:bg-[#FFBA84]/12">
+                    <div className="flex items-baseline gap-4 min-w-0">
+                      <span className="text-xs font-mono tabular-nums text-[#F05E1C] shrink-0">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0">
+                        <h2 className="text-lg sm:text-xl tracking-[0.1em] font-normal text-[#0C0C0C] group-hover:text-[#F05E1C] transition-colors">
+                          {item.title}
+                        </h2>
+                        <p className="mt-1.5 text-sm leading-[1.8] text-[#0C0C0C]/70">
+                          {item.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 text-xs tracking-[0.14em] shrink-0 pl-8 sm:pl-0">
+                      {hasUrl ? (
+                        <span className="inline-flex items-center gap-1.5 text-[#0B346E] group-hover:text-[#F05E1C] transition-colors">
+                          <span>前往網站</span>
+                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                        </span>
+                      ) : (
+                        <span className="text-[#0C0C0C]/40 font-mono">連結待補</span>
+                      )}
+                    </div>
+                  </div>
+                );
+
                 return (
                   <div key={item.id} className="border-b border-[#0C0C0C]/15">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedLinkId(isExpanded ? '' : item.id)}
-                      aria-expanded={isExpanded}
-                      className="w-full text-left py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FFBA84]/12 px-3 -mx-3 transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-baseline gap-4">
-                        <span className="text-xs font-mono tabular-nums text-[#F05E1C]">
-                          {String(idx + 1).padStart(2, '0')}
-                        </span>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-[#0C0C0C]/55">
-                            <span>{item.category}</span>
-                            <span aria-hidden="true">·</span>
-                            <span className="font-mono tabular-nums">{item.coordinates}</span>
-                          </div>
-                          <h2 className="mt-1 text-xl tracking-[0.1em] font-normal text-[#0C0C0C]">
-                            {item.title}
-                          </h2>
-                        </div>
-                      </div>
-
-                      <div className="inline-flex items-center gap-2 text-xs tracking-[0.14em] text-[#0C0C0C]/65 shrink-0 pl-8 sm:pl-0">
-                        <span>{isExpanded ? '收合註記' : '展開導覽'}</span>
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform duration-300 ${
-                            isExpanded ? 'rotate-180 text-[#F05E1C]' : ''
-                          }`}
-                          aria-hidden="true"
-                        />
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="animate-notice-enter pb-7 pl-0 sm:pl-10 pr-2 grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        <div className="lg:col-span-7 space-y-3">
-                          <p className="text-[15px] leading-[1.85] text-[#0C0C0C]/80">
-                            {item.description}
-                          </p>
-                          <p className="text-sm leading-[1.75] text-[#0B346E]">
-                            策展走讀筆記：{item.fieldNote}
-                          </p>
-                        </div>
-                        <div className="lg:col-span-5 lg:border-l lg:border-[#0C0C0C]/12 lg:pl-6 flex flex-col justify-center gap-2 text-sm text-[#0C0C0C]/70">
-                          <div className="flex items-start gap-2">
-                            <MapPin className="w-4 h-4 text-[#F05E1C] mt-0.5 shrink-0" aria-hidden="true" />
-                            <span>{item.location}</span>
-                          </div>
-                          <p className="text-xs font-mono tabular-nums text-[#0C0C0C]/55 pl-6">
-                            {item.coordinates}
-                          </p>
-                        </div>
-                      </div>
+                    {hasUrl ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C]"
+                      >
+                        {content}
+                      </a>
+                    ) : (
+                      <div className="group">{content}</div>
                     )}
                   </div>
                 );
@@ -477,8 +459,8 @@ export function ExhibitionMain({
                 </p>
               </div>
 
-              {/* Quick Navigation & Stage Replay */}
-              <div className="md:col-span-4 flex flex-col items-start md:items-end justify-between gap-4">
+              {/* Quick Navigation */}
+              <div className="md:col-span-4 flex flex-col items-start md:items-end justify-start gap-4">
                 <div className="flex flex-wrap md:justify-end gap-x-5 gap-y-2 text-xs tracking-[0.14em] text-[#FCFAF2]/75">
                   {NAV_ITEMS.map((item) => (
                     <button
@@ -492,25 +474,6 @@ export function ExhibitionMain({
                       {item.label}
                     </button>
                   ))}
-                </div>
-                <div className="flex items-center gap-4 text-xs tracking-[0.12em] text-[#FCFAF2]/60">
-                  <button
-                    type="button"
-                    onClick={onReplayPrologue}
-                    className="inline-flex items-center gap-1 hover:text-[#FFBA84] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>重溫序幕</span>
-                  </button>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    type="button"
-                    onClick={onOpenTicketMachine}
-                    className="inline-flex items-center gap-1 hover:text-[#FFBA84] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <Ticket className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>返回售票機</span>
-                  </button>
                 </div>
               </div>
             </div>

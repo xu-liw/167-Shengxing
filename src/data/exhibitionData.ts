@@ -118,12 +118,9 @@ export interface CuratorialCredit {
 
 export interface CulturalLinkItem {
   id: string;
-  category: string;
   title: string;
-  location: string;
   description: string;
-  fieldNote: string;
-  coordinates: string;
+  url?: string;
 }
 
 export interface ExhibitionImages {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { soundEngine } from '../utils/soundEngine';
 
 interface PrologueStageProps {
   onComplete: () => void;
@@ -12,6 +13,7 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
   const triggerExit = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
+    soundEngine.unlock();
     setIsFadingOut(true);
     window.setTimeout(() => {
       onComplete();

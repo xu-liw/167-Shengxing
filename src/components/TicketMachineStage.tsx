@@ -94,31 +94,32 @@ export function TicketMachineStage({
   return (
     <main
       aria-label="台鐵經典按鍵式自動售票機"
-      className={`fixed inset-0 w-screen h-screen bg-[#0C0C0C] text-[#FCFAF2] flex flex-col items-center justify-center overflow-hidden p-2 sm:p-4 select-none transition-opacity duration-700 ease-out ${
+      className={`fixed inset-0 z-50 w-full h-[100dvh] bg-[#0C0C0C] text-[#FCFAF2] overflow-y-auto overscroll-contain select-none transition-opacity duration-700 ease-out ${
         isExiting ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
-      {/* Top Breadcrumb Utility */}
-      <div className="w-full max-w-[480px] flex items-center justify-between gap-4 mb-1.5 px-2 text-[11px] tracking-[0.14em] text-[#FCFAF2]/60">
-        <button
-          type="button"
-          onClick={onReplayPrologue}
-          className="inline-flex items-center gap-1.5 hover:text-[#FFBA84] transition-colors cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>重溫序幕</span>
-        </button>
-        <span className="font-mono text-[#FFBA84]">
-          {currentStep === 5
-            ? '請點擊硬幣孔付費 ➜'
-            : `步驟 ${currentStep} / 5 · 點選發光鍵`}
-        </span>
-      </div>
+      <div className="min-h-full w-full flex flex-col items-center justify-start sm:justify-center px-2.5 py-3 sm:p-4">
+        {/* Top Breadcrumb Utility */}
+        <div className="w-full max-w-[480px] flex items-center justify-between gap-4 mb-2 px-1 text-[11px] tracking-[0.14em] text-[#FCFAF2]/60 shrink-0">
+          <button
+            type="button"
+            onClick={onReplayPrologue}
+            className="inline-flex items-center gap-1.5 min-h-[36px] hover:text-[#FFBA84] transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>重溫序幕</span>
+          </button>
+          <span className="font-mono text-[#FFBA84]">
+            {currentStep === 5
+              ? '請點擊硬幣孔付費 ➜'
+              : `步驟 ${currentStep} / 5 · 點選發光鍵`}
+          </span>
+        </div>
 
-      {/* Upright Ticket Machine Chassis (Strictly constrained within h-[92dvh], NO scroll) */}
-      <div
-        className="relative w-full max-w-[480px] h-[92dvh] max-h-[820px] flex flex-col justify-between bg-[#0B346E] border-4 border-[#C8CCD4] shadow-[0_0_0_2px_#343842,0_20px_50px_rgba(0,0,0,0.95)] rounded-lg p-2.5 sm:p-3 overflow-hidden"
-      >
+        {/* Upright Ticket Machine Chassis (Clean responsive sizing + smooth scroll on shorter viewports) */}
+        <div
+          className="relative w-full max-w-[480px] flex flex-col gap-2 sm:gap-2.5 bg-[#0B346E] border-4 border-[#C8CCD4] shadow-[0_0_0_2px_#343842,0_20px_50px_rgba(0,0,0,0.95)] rounded-lg p-2.5 sm:p-3 shrink-0"
+        >
         {/* Machine Head Fascia */}
         <header className="bg-[#082652] border border-[#FCFAF2]/20 rounded-t-sm px-3 py-1.5 flex items-center justify-between text-[#FCFAF2] shrink-0">
           <div className="flex items-center gap-2">
@@ -367,7 +368,7 @@ export function TicketMachineStage({
         {/* 4. FOURTH ROW: Large Station Panel (第四排：4 請按到達站鍵後付費) */}
         <section
           aria-label="4 請按到達站鍵後付費"
-          className="bg-[#FCFAF2] text-[#0C0C0C] rounded-md p-2.5 shadow-inner border border-[#082652]/40 flex-1 flex flex-col justify-between"
+          className="bg-[#FCFAF2] text-[#0C0C0C] rounded-md p-2.5 shadow-inner border border-[#082652]/40 flex flex-col"
         >
           <div className="flex items-center justify-between pb-1 mb-2 border-b border-[#0C0C0C]/15 shrink-0">
             <span className="text-[11px] font-bold text-[#0B346E] tracking-[0.08em]">
@@ -379,7 +380,7 @@ export function TicketMachineStage({
           </div>
 
           {/* 10 Station Buttons (2 Rows x 5 Columns) */}
-          <div className="grid grid-rows-2 gap-2 flex-1">
+          <div className="grid grid-rows-2 gap-2">
             {/* Station Row 1: 台北、板橋、新竹、苗栗、三義 */}
             <div className="grid grid-cols-5 gap-1.5">
               {STATIONS_ROW_1.map((st) => (
@@ -443,6 +444,7 @@ export function TicketMachineStage({
             </span>
           </div>
         </section>
+      </div>
       </div>
     </main>
   );
