@@ -41,7 +41,7 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
   return (
     <section
       aria-label="開場序幕"
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0C0C0C] text-[#FCFAF2] px-6 py-10 transition-opacity duration-700 ease-out ${
+      className={`fixed inset-0 z-50 h-[100dvh] flex flex-col items-center bg-[#0C0C0C] text-[#FCFAF2] px-6 pt-16 pb-20 sm:pt-20 sm:pb-24 overflow-y-auto transition-opacity duration-700 ease-out ${
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -58,63 +58,66 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
         <span>21:10</span>
       </div>
 
-      {/* Main vertical-rl typography stage */}
-      <div className="relative z-10 flex items-center justify-center w-full max-w-4xl h-[74vh] max-h-[600px]">
-        <div
-          className="writing-vertical-rl flex flex-col justify-center gap-8 sm:gap-12 md:gap-16 h-full py-4"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          {/* Line 1 (Rightmost column in vertical-rl) */}
-          <p
-            className="animate-prologue-line text-[15px] sm:text-lg md:text-[21px] leading-[2.2] tracking-[0.22em] text-[#FCFAF2]/90 max-h-[68vh]"
-            style={{ animationDelay: '0.4s' }}
-          >
-            1998年9月23日，
-            <br />
-            167次莒光號最後一次停靠勝興，
-            <br />
-            舊山線從此走入歷史。
-          </p>
-
-          {/* Line 2 (Middle column) */}
-          <p
-            className="animate-prologue-line flex flex-nowrap items-center whitespace-nowrap text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.26em] text-[#FFBA84] self-center"
-            style={{ animationDelay: '2.5s' }}
-          >
-            <span className="whitespace-nowrap">這次，讓我們一起回到那一天晚上</span>
-            <span className="sr-only">……</span>
-            <span
-              aria-hidden="true"
-              className="inline-flex flex-col items-center justify-center gap-[3.5px] sm:gap-[4.5px] shrink-0 mt-1"
-              style={{ writingMode: 'horizontal-tb' }}
+      {/* Centered 3-part vertical typography group with preserved descending staircase order */}
+      <div className="relative z-10 my-auto w-full flex items-center justify-center">
+        <div className="flex flex-row-reverse items-start justify-center gap-6 sm:gap-12 md:gap-16">
+          {/* Line 1 (Rightmost column group, highest step) */}
+          <div className="pt-0 shrink-0">
+            <p
+              className="writing-vertical-rl animate-prologue-line text-[15px] sm:text-lg md:text-[21px] leading-[2.1] sm:leading-[2.2] tracking-[0.2em] sm:tracking-[0.22em] text-[#FCFAF2]/90"
+              style={{ writingMode: 'vertical-rl', animationDelay: '0.4s' }}
             >
-              {[0, 1, 2, 3, 4, 5].map((dot) => (
-                <span
-                  key={dot}
-                  className="block w-[2.5px] h-[2.5px] sm:w-[3px] sm:h-[3px] rounded-full bg-current"
-                />
-              ))}
-            </span>
-          </p>
+              1998年9月23日，
+              <br />
+              167次莒光號最後一次停靠勝興，
+              <br />
+              舊山線從此走入歷史。
+            </p>
+          </div>
 
-          {/* Line 3 (Leftmost focal title) */}
-          <div
-            className="animate-prologue-line flex items-center gap-4 self-center"
-            style={{ animationDelay: '4.6s' }}
-          >
-            <span
-              aria-hidden="true"
-              className="block w-px h-10 sm:h-14 bg-[#F05E1C]/80"
-            />
-            <h1 className="inline-flex items-center text-2xl sm:text-3xl md:text-4xl tracking-[0.25em] text-[#FCFAF2] font-normal whitespace-nowrap">
-              <span>167次</span>
-              <span className="sr-only">-</span>
+          {/* Line 2 (Middle column, second step) */}
+          <div className="pt-10 sm:pt-12 md:pt-12 shrink-0">
+            <p
+              className="writing-vertical-rl animate-prologue-line flex flex-nowrap items-center whitespace-nowrap text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.22em] sm:tracking-[0.26em] text-[#FFBA84]"
+              style={{ writingMode: 'vertical-rl', animationDelay: '2.5s' }}
+            >
+              <span className="whitespace-nowrap">這次，讓我們一起回到那一天晚上</span>
+              <span className="sr-only">……</span>
               <span
                 aria-hidden="true"
-                className="inline-block w-[2px] h-[0.42em] bg-[#F05E1C] mt-[0.1em] mb-[0.35em] shrink-0"
+                className="inline-flex flex-col items-center justify-center gap-[3.5px] sm:gap-[4.5px] shrink-0 mt-1"
+                style={{ writingMode: 'horizontal-tb' }}
+              >
+                {[0, 1, 2, 3, 4, 5].map((dot) => (
+                  <span
+                    key={dot}
+                    className="block w-[2.5px] h-[2.5px] sm:w-[3px] sm:h-[3px] rounded-full bg-current"
+                  />
+                ))}
+              </span>
+            </p>
+          </div>
+
+          {/* Line 3 (Leftmost focal title, third step) */}
+          <div className="pt-20 sm:pt-24 md:pt-24 shrink-0">
+            <div
+              className="writing-vertical-rl animate-prologue-line flex items-center gap-4"
+              style={{ writingMode: 'vertical-rl', animationDelay: '4.6s' }}
+            >
+              <span
+                aria-hidden="true"
+                className="block w-px h-10 sm:h-14 bg-[#F05E1C]/80"
               />
-              <span>勝興</span>
-            </h1>
+              <h1 className="inline-flex items-center text-2xl sm:text-3xl md:text-4xl tracking-[0.25em] text-[#FCFAF2] font-normal whitespace-nowrap">
+                <span>167次</span>
+                <span className="sr-only">-</span>
+                <span
+                  aria-hidden="true"
+                  className="inline-block w-[2px] h-[0.42em] bg-[#F05E1C] mt-[0.1em] mb-[0.35em] shrink-0"
+                />
+                <span>勝興</span>
+              </h1>
+            </div>
           </div>
         </div>
       </div>
