@@ -60,33 +60,50 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
 
       {/* Centered 3-part vertical typography group with preserved descending staircase order */}
       <div className="relative z-10 my-auto w-full flex items-center justify-center">
-        <div className="flex flex-row-reverse items-start justify-center gap-6 sm:gap-12 md:gap-16">
-          {/* Line 1 (Rightmost column group, highest step) */}
+        <div className="flex flex-row-reverse items-start justify-center gap-8 sm:gap-12 md:gap-16">
+          {/* Line 1 (Rightmost column group, highest step — 3 explicit single-line columns to prevent iOS Safari vertical-rl width collapse) */}
           <div className="pt-0 shrink-0">
             <p
-              className="writing-vertical-rl animate-prologue-line text-[15px] sm:text-lg md:text-[21px] leading-[2.1] sm:leading-[2.2] tracking-[0.2em] sm:tracking-[0.22em] text-[#FCFAF2]/90"
-              style={{ writingMode: 'vertical-rl', animationDelay: '0.4s' }}
+              className="animate-prologue-line flex flex-row-reverse items-start gap-3 sm:gap-5 text-[15px] sm:text-lg md:text-[21px] text-[#FCFAF2]/90"
+              style={{ animationDelay: '0.4s' }}
             >
-              1998年9月23日，
-              <br />
-              167次莒光號最後一次停靠勝興，
-              <br />
-              舊山線從此走入歷史。
+              <span
+                className="writing-vertical-rl block w-[1.35em] leading-[1.35] whitespace-nowrap tracking-[0.2em] sm:tracking-[0.22em]"
+                style={{ writingMode: 'vertical-rl' }}
+              >
+                1998年9月23日，
+              </span>
+              <span
+                className="writing-vertical-rl block w-[1.35em] leading-[1.35] whitespace-nowrap tracking-[0.2em] sm:tracking-[0.22em]"
+                style={{ writingMode: 'vertical-rl' }}
+              >
+                167次莒光號最後一次停靠勝興，
+              </span>
+              <span
+                className="writing-vertical-rl block w-[1.35em] leading-[1.35] whitespace-nowrap tracking-[0.2em] sm:tracking-[0.22em]"
+                style={{ writingMode: 'vertical-rl' }}
+              >
+                舊山線從此走入歷史。
+              </span>
             </p>
           </div>
 
           {/* Line 2 (Middle column, second step) */}
           <div className="pt-10 sm:pt-12 md:pt-12 shrink-0">
             <p
-              className="writing-vertical-rl animate-prologue-line flex flex-nowrap items-center whitespace-nowrap text-base sm:text-xl md:text-2xl leading-[2] tracking-[0.22em] sm:tracking-[0.26em] text-[#FFBA84]"
-              style={{ writingMode: 'vertical-rl', animationDelay: '2.5s' }}
+              className="animate-prologue-line flex flex-col items-center w-[1.4em] text-base sm:text-xl md:text-2xl text-[#FFBA84]"
+              style={{ animationDelay: '2.5s' }}
             >
-              <span className="whitespace-nowrap">這次，讓我們一起回到那一天晚上</span>
+              <span
+                className="writing-vertical-rl block w-[1.4em] leading-[1.4] whitespace-nowrap tracking-[0.22em] sm:tracking-[0.26em]"
+                style={{ writingMode: 'vertical-rl' }}
+              >
+                這次，讓我們一起回到那一天晚上
+              </span>
               <span className="sr-only">……</span>
               <span
                 aria-hidden="true"
-                className="inline-flex flex-col items-center justify-center gap-[3.5px] sm:gap-[4.5px] shrink-0 mt-1"
-                style={{ writingMode: 'horizontal-tb' }}
+                className="flex flex-col items-center justify-center gap-[3.5px] sm:gap-[4.5px] mt-1.5 shrink-0"
               >
                 {[0, 1, 2, 3, 4, 5].map((dot) => (
                   <span
@@ -101,21 +118,31 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
           {/* Line 3 (Leftmost focal title, third step) */}
           <div className="pt-20 sm:pt-24 md:pt-24 shrink-0">
             <div
-              className="writing-vertical-rl animate-prologue-line flex items-center gap-4"
-              style={{ writingMode: 'vertical-rl', animationDelay: '4.6s' }}
+              className="animate-prologue-line flex flex-col items-center gap-4 w-[1.4em]"
+              style={{ animationDelay: '4.6s' }}
             >
               <span
                 aria-hidden="true"
-                className="block w-px h-10 sm:h-14 bg-[#F05E1C]/80"
+                className="block w-px h-10 sm:h-14 bg-[#F05E1C]/80 shrink-0"
               />
-              <h1 className="inline-flex items-center text-2xl sm:text-3xl md:text-4xl tracking-[0.25em] text-[#FCFAF2] font-normal whitespace-nowrap">
-                <span>167次</span>
+              <h1 className="flex flex-col items-center text-2xl sm:text-3xl md:text-4xl text-[#FCFAF2] font-normal">
+                <span
+                  className="writing-vertical-rl block w-[1.4em] leading-[1.4] whitespace-nowrap tracking-[0.25em]"
+                  style={{ writingMode: 'vertical-rl' }}
+                >
+                  167次
+                </span>
                 <span className="sr-only">-</span>
                 <span
                   aria-hidden="true"
-                  className="inline-block w-[2px] h-[0.42em] bg-[#F05E1C] mt-[0.1em] mb-[0.35em] shrink-0"
+                  className="block w-[2px] h-[0.42em] bg-[#F05E1C] mt-[0.08em] mb-[0.34em] shrink-0"
                 />
-                <span>勝興</span>
+                <span
+                  className="writing-vertical-rl block w-[1.4em] leading-[1.4] whitespace-nowrap tracking-[0.25em]"
+                  style={{ writingMode: 'vertical-rl' }}
+                >
+                  勝興
+                </span>
               </h1>
             </div>
           </div>
