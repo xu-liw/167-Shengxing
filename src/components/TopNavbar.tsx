@@ -12,6 +12,7 @@ interface TopNavbarProps {
   onToggleMute: () => void;
   onReplayPrologue: () => void;
   onOpenTicketMachine: () => void;
+  shouldNudgeMenu?: boolean;
 }
 
 export function TopNavbar({
@@ -24,6 +25,7 @@ export function TopNavbar({
   onToggleMute,
   onReplayPrologue,
   onOpenTicketMachine,
+  shouldNudgeMenu = false,
 }: TopNavbarProps) {
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -45,21 +47,32 @@ export function TopNavbar({
       {/* Fixed 3-Zone Top Navigation Bar */}
       <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-[#FCFAF2]/95 backdrop-blur-sm border-b border-[#0C0C0C]/12">
         <div className="max-w-[1240px] h-full mx-auto px-4 sm:px-8 grid grid-cols-3 items-center">
-          {/* Left Zone: Hamburger Menu Button */}
-          <div className="flex items-center justify-start">
+          {/* Left Zone: Hamburger Menu Button (with top-right orange dot hint after 1 minute) */}
+          <div className="relative flex items-center justify-start">
             <button
               type="button"
               onClick={onToggleMenu}
               aria-expanded={isMenuOpen}
               aria-controls="exhibition-nav-drawer"
               aria-label={isMenuOpen ? '關閉導覽選單' : '開啟導覽選單'}
-              className="inline-flex items-center gap-2.5 min-h-[44px] min-w-[44px] px-2 -ml-2 text-[#0C0C0C] hover:text-[#F05E1C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className="relative inline-flex items-center gap-2.5 min-h-[44px] min-w-[44px] px-2 -ml-2 text-[#0C0C0C] hover:text-[#F05E1C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C] transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
-              {isMenuOpen ? (
-                <X className="w-5 h-5 shrink-0" aria-hidden="true" />
-              ) : (
-                <Menu className="w-5 h-5 shrink-0" aria-hidden="true" />
-              )}
+              <span className="relative inline-flex items-center justify-center">
+                {isMenuOpen ? (
+                  <X className="w-5 h-5 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Menu className="w-5 h-5 shrink-0" aria-hidden="true" />
+                )}
+                {shouldNudgeMenu && !isMenuOpen && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1 -right-1 flex h-2.5 w-2.5"
+                  >
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F05E1C] opacity-80" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#F05E1C]" />
+                  </span>
+                )}
+              </span>
               <span className="hidden sm:inline text-sm tracking-[0.18em]">選單</span>
             </button>
           </div>

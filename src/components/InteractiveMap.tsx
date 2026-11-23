@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
+  HelpCircle,
   Layers,
   Move,
   RotateCcw,
   Stamp,
   TrainFront,
+  X,
 } from 'lucide-react';
 import {
   BLOCK_INSTRUMENT_DATA,
@@ -33,6 +35,9 @@ interface InteractiveMapProps {
 // Active scrollable railway length from Sanyi (0%) to Fengyuan (100%)
 const ROUTE_LENGTH_LANDSCAPE = 2600;
 const ROUTE_LENGTH_PORTRAIT = 2200;
+
+// Show the onboarding exploration hint only on the first entry to「探索舊山線」per visit
+let hasShownExploreOnboarding = false;
 
 // 5 station milestones along normalized progress t ∈ [0, 1] with distances from Sanyi (km)
 const ROUTE_MILESTONES = [
@@ -148,9 +153,30 @@ export function InteractiveMap({
   const prevSectionIndexRef = useRef<number>(1);
   const hasInitializedScrollRef = useRef<boolean>(false);
 
+  // Directional edge hints: both show for 4s on entry then fade out;
+  // moving south reveals North (三義), moving north reveals South (豐原)
+  const [showNorthHint, setShowNorthHint] = useState<boolean>(true);
+  const [showSouthHint, setShowSouthHint] = useState<boolean>(true);
+  const introHintTimerRef = useRef<number | null>(null);
+  const lastScrollProgressRef = useRef<number>(0.36);
+  const ignoreDirectionScrollRef = useRef<boolean>(true);
+  const ignoreDirectionTimerRef = useRef<number | null>(null);
+
+  // First-time onboarding fade-in / fade-out guide dialog (also toggleable via '?' icon)
+  const [onboardingPhase, setOnboardingPhase] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>(
+    () => (hasShownExploreOnboarding ? 'hidden' : 'entering')
+  );
+  const onboardingTimersRef = useRef<number[]>([]);
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  });
+
   // DOM Refs
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const activeRouteRef = useRef<HTMLDivElement | null>(null);
+  const trainButtonRef = useRef<HTMLButtonElement | null>(null);
+  const trainOverlayRef = useRef<HTMLDivElement | null>(null);
 
   // Drag-to-pan state for desktop mouse dragging
   const isPanningRef = useRef(false);
@@ -161,27 +187,61 @@ export function InteractiveMap({
     return BLOCK_SECTIONS[currentSectionIndex] || BLOCK_SECTIONS[1];
   }, [currentSectionIndex]);
 
-  // Half-viewport padding ensures scroll=0 centers 三義 (t=0) and maxScroll centers 豐原 (t=1)
-  const halfW = Math.round(viewportSize.width / 2);
-  const halfH = Math.round(viewportSize.height / 2);
+  // Exact half-viewport padding ensures scroll=0 centers 三義 (t=0), maxScroll centers 豐原 (t=1),
+  // and the train stays locked to the exact center of the railway track across all viewport sizes
+  const halfW = viewportSize.width / 2;
+  const halfH = viewportSize.height / 2;
 
   const canvasWidth = isLandscape
     ? ROUTE_LENGTH_LANDSCAPE + viewportSize.width
-    : Math.max(360, viewportSize.width);
+    : viewportSize.width;
   const canvasHeight = isLandscape
-    ? Math.max(460, viewportSize.height)
+    ? viewportSize.height
     : ROUTE_LENGTH_PORTRAIT + viewportSize.height;
 
+  // Directly sync train DOM coordinates with exact container pixel geometry (zero-frame scroll lag)
+  const syncTrainDomPosition = useCallback((t: number, landscape: boolean) => {
+    const container = scrollContainerRef.current;
+    const trainBtn = trainButtonRef.current;
+    const overlay = trainOverlayRef.current;
+    if (!container || !trainBtn) return;
+
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (overlay) {
+      overlay.style.width = `${w}px`;
+      overlay.style.height = `${h}px`;
+    }
+
+    const crossFrac = getTrackCrossPercent(t) / 100;
+    if (landscape) {
+      trainBtn.style.left = `${w / 2}px`;
+      trainBtn.style.top = `${crossFrac * h}px`;
+    } else {
+      trainBtn.style.left = `${crossFrac * w}px`;
+      trainBtn.style.top = `${h / 2}px`;
+    }
+  }, []);
+
   // Observe container dimensions and window orientation
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     const updateSize = () => {
+      const nextLandscape = window.innerWidth > window.innerHeight;
+      setIsLandscape(nextLandscape);
+      setIsTouchDevice(window.matchMedia?.('(pointer: coarse)').matches ?? false);
+
       if (container) {
         const w = container.clientWidth || window.innerWidth;
         const h = container.clientHeight || Math.max(480, window.innerHeight - 64);
         setViewportSize({ width: w, height: h });
+
+        const rawT = nextLandscape
+          ? container.scrollLeft / ROUTE_LENGTH_LANDSCAPE
+          : container.scrollTop / ROUTE_LENGTH_PORTRAIT;
+        const clampedT = Math.max(0, Math.min(1, rawT));
+        syncTrainDomPosition(clampedT, nextLandscape);
       }
-      setIsLandscape(window.innerWidth > window.innerHeight);
     };
 
     updateSize();
@@ -197,6 +257,84 @@ export function InteractiveMap({
       observer?.disconnect();
       window.removeEventListener('resize', updateSize);
     };
+  }, [syncTrainDomPosition]);
+
+  const clearOnboardingTimers = useCallback(() => {
+    onboardingTimersRef.current.forEach((id) => window.clearTimeout(id));
+    onboardingTimersRef.current = [];
+  }, []);
+
+  // First-time onboarding dialog lifecycle: fade in -> hold ~7s -> fade out -> unmount
+  useEffect(() => {
+    if (hasShownExploreOnboarding) {
+      setOnboardingPhase('hidden');
+      return;
+    }
+    hasShownExploreOnboarding = true;
+
+    const enterTimer = window.setTimeout(() => {
+      setOnboardingPhase('visible');
+    }, 220);
+
+    const leaveTimer = window.setTimeout(() => {
+      setOnboardingPhase('leaving');
+    }, 7200);
+
+    const hideTimer = window.setTimeout(() => {
+      setOnboardingPhase('hidden');
+    }, 7950);
+
+    onboardingTimersRef.current = [enterTimer, leaveTimer, hideTimer];
+
+    return () => {
+      clearOnboardingTimers();
+    };
+  }, [clearOnboardingTimers]);
+
+  const dismissOnboarding = useCallback(() => {
+    clearOnboardingTimers();
+    setOnboardingPhase('leaving');
+    const hideTimer = window.setTimeout(() => {
+      setOnboardingPhase('hidden');
+    }, 500);
+    onboardingTimersRef.current = [hideTimer];
+  }, [clearOnboardingTimers]);
+
+  const toggleOnboardingGuide = useCallback(() => {
+    soundEngine.playSelectClick();
+    if (onboardingPhase === 'visible' || onboardingPhase === 'entering') {
+      dismissOnboarding();
+      return;
+    }
+    clearOnboardingTimers();
+    hasShownExploreOnboarding = true;
+    setOnboardingPhase('entering');
+    const enterTimer = window.setTimeout(() => {
+      setOnboardingPhase('visible');
+    }, 20);
+    onboardingTimersRef.current = [enterTimer];
+  }, [onboardingPhase, clearOnboardingTimers, dismissOnboarding]);
+
+  // Initial 4-second entry display for both North & South edge hints, then fade out
+  useEffect(() => {
+    setShowNorthHint(true);
+    setShowSouthHint(true);
+    introHintTimerRef.current = window.setTimeout(() => {
+      setShowNorthHint(false);
+      setShowSouthHint(false);
+      introHintTimerRef.current = null;
+    }, 4000);
+
+    return () => {
+      if (introHintTimerRef.current !== null) {
+        window.clearTimeout(introHintTimerRef.current);
+        introHintTimerRef.current = null;
+      }
+      if (ignoreDirectionTimerRef.current !== null) {
+        window.clearTimeout(ignoreDirectionTimerRef.current);
+        ignoreDirectionTimerRef.current = null;
+      }
+    };
   }, []);
 
   // Center scroll on Shengxing Station (t = 0.36)
@@ -206,6 +344,11 @@ export function InteractiveMap({
       if (!container) return;
 
       const shengxingT = 0.36;
+      ignoreDirectionScrollRef.current = true;
+      if (ignoreDirectionTimerRef.current !== null) {
+        window.clearTimeout(ignoreDirectionTimerRef.current);
+      }
+
       if (isLandscape) {
         container.scrollTo({
           left: Math.round(shengxingT * ROUTE_LENGTH_LANDSCAPE),
@@ -219,20 +362,27 @@ export function InteractiveMap({
       }
 
       setScrollProgress(shengxingT);
+      lastScrollProgressRef.current = shengxingT;
       setCurrentDistanceKm(5.0);
       prevSectionIndexRef.current = 1;
       setCurrentSectionIndex(1);
+      syncTrainDomPosition(shengxingT, isLandscape);
+
+      ignoreDirectionTimerRef.current = window.setTimeout(
+        () => {
+          ignoreDirectionScrollRef.current = false;
+          ignoreDirectionTimerRef.current = null;
+        },
+        smooth ? 650 : 180
+      );
     },
-    [isLandscape]
+    [isLandscape, syncTrainDomPosition]
   );
 
   // Initial auto-centering on mount & orientation switch
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      centerOnShengxing(false);
-      hasInitializedScrollRef.current = true;
-    }, 80);
-    return () => clearTimeout(timer);
+  useLayoutEffect(() => {
+    centerOnShengxing(false);
+    hasInitializedScrollRef.current = true;
   }, [isLandscape, centerOnShengxing]);
 
   // Listen for external center-shengxing event (e.g. from TopNavbar title click)
@@ -244,12 +394,23 @@ export function InteractiveMap({
     return () => window.removeEventListener('center-shengxing', handleCenterEvent);
   }, [centerOnShengxing]);
 
-  // Handle mouse wheel horizontal scroll in landscape mode
+  // Handle mouse wheel horizontal scroll in landscape mode & re-enable directional hints on user input
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    const handleUserScrollIntent = () => {
+      if (hasInitializedScrollRef.current && ignoreDirectionScrollRef.current) {
+        ignoreDirectionScrollRef.current = false;
+        if (ignoreDirectionTimerRef.current !== null) {
+          window.clearTimeout(ignoreDirectionTimerRef.current);
+          ignoreDirectionTimerRef.current = null;
+        }
+      }
+    };
+
     const handleWheel = (e: WheelEvent) => {
+      handleUserScrollIntent();
       if (!isLandscape) return;
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
@@ -258,10 +419,14 @@ export function InteractiveMap({
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    container.addEventListener('touchstart', handleUserScrollIntent, { passive: true });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleUserScrollIntent);
+    };
   }, [isLandscape]);
 
-  // Dynamic Train Tracking, Distance Meter & Block Section via scroll
+  // Dynamic Train Tracking, Distance Meter, Directional Edge Hints & Block Section via scroll
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -272,8 +437,32 @@ export function InteractiveMap({
     const clampedT = Math.max(0, Math.min(1, rawT));
     const percent = clampedT * 100;
 
+    // Update train position synchronously before React re-render so it stays 0px locked to the rail center
+    syncTrainDomPosition(clampedT, isLandscape);
+
     setScrollProgress(clampedT);
     setCurrentDistanceKm(getDistanceKmAtProgress(clampedT));
+
+    // Directional hints: moving south reveals North (三義); moving north reveals South (豐原)
+    if (hasInitializedScrollRef.current && !ignoreDirectionScrollRef.current) {
+      const delta = clampedT - lastScrollProgressRef.current;
+      if (Math.abs(delta) > 0.002) {
+        if (introHintTimerRef.current !== null) {
+          window.clearTimeout(introHintTimerRef.current);
+          introHintTimerRef.current = null;
+        }
+        if (delta > 0) {
+          setShowNorthHint(true);
+          setShowSouthHint(false);
+        } else {
+          setShowNorthHint(false);
+          setShowSouthHint(true);
+        }
+        lastScrollProgressRef.current = clampedT;
+      }
+    } else {
+      lastScrollProgressRef.current = clampedT;
+    }
 
     // Track Block Section dynamically & ring block bell on section transition
     const matchedSecIdx = BLOCK_SECTIONS.findIndex((sec) => {
@@ -288,7 +477,7 @@ export function InteractiveMap({
         soundEngine.playBlockBell();
       }
     }
-  }, [isLandscape]);
+  }, [isLandscape, syncTrainDomPosition]);
 
   // Desktop click-and-drag panning on map background
   const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -297,6 +486,15 @@ export function InteractiveMap({
     if ((e.target as HTMLElement).closest('[data-map-interactive="true"]')) return;
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    // Re-enable directional hints immediately when user starts dragging the map
+    if (hasInitializedScrollRef.current && ignoreDirectionScrollRef.current) {
+      ignoreDirectionScrollRef.current = false;
+      if (ignoreDirectionTimerRef.current !== null) {
+        window.clearTimeout(ignoreDirectionTimerRef.current);
+        ignoreDirectionTimerRef.current = null;
+      }
+    }
 
     isPanningRef.current = true;
     panStartRef.current = {
@@ -416,15 +614,16 @@ export function InteractiveMap({
     setTimeout(() => setCopyFeedback(null), 2500);
   };
 
-  // Click on centered train head: play whistle sound & open ⑫ 莒光號列車正面 modal
+  // Click on centered train head: play whistle sound & open ⑫ 莒光167次 modal
   const handleTrainClick = () => {
     soundEngine.playTrainWhistle();
     openModalById(TRAIN_167_OBJECT.id);
   };
 
   // Compute exact pixel-coordinate SVG paths for the main track + faded north/south extensions
+  // High-resolution sampling (200 steps) keeps the S-curve silky smooth with uniform rail borders & dashes
   const trackGeometry = useMemo(() => {
-    const steps = 80;
+    const steps = 200;
     const activePoints: string[] = [];
 
     for (let i = 0; i <= steps; i++) {
@@ -433,23 +632,23 @@ export function InteractiveMap({
       if (isLandscape) {
         const px = halfW + t * ROUTE_LENGTH_LANDSCAPE;
         const py = crossFrac * canvasHeight;
-        activePoints.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+        activePoints.push(`${px.toFixed(2)},${py.toFixed(2)}`);
       } else {
         const px = crossFrac * canvasWidth;
         const py = halfH + t * ROUTE_LENGTH_PORTRAIT;
-        activePoints.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+        activePoints.push(`${px.toFixed(2)},${py.toFixed(2)}`);
       }
     }
 
     const activePathD = `M ${activePoints.join(' L ')}`;
 
     const northExtensionD = isLandscape
-      ? `M 0,${(canvasHeight * 0.5).toFixed(1)} L ${halfW},${(canvasHeight * 0.5).toFixed(1)}`
-      : `M ${(canvasWidth * 0.5).toFixed(1)},0 L ${(canvasWidth * 0.5).toFixed(1)},${halfH}`;
+      ? `M 0,${(canvasHeight * 0.5).toFixed(2)} L ${halfW.toFixed(2)},${(canvasHeight * 0.5).toFixed(2)}`
+      : `M ${(canvasWidth * 0.5).toFixed(2)},0 L ${(canvasWidth * 0.5).toFixed(2)},${halfH.toFixed(2)}`;
 
     const southExtensionD = isLandscape
-      ? `M ${halfW + ROUTE_LENGTH_LANDSCAPE},${(canvasHeight * 0.5).toFixed(1)} L ${canvasWidth},${(canvasHeight * 0.5).toFixed(1)}`
-      : `M ${(canvasWidth * 0.5).toFixed(1)},${halfH + ROUTE_LENGTH_PORTRAIT} L ${(canvasWidth * 0.5).toFixed(1)},${canvasHeight}`;
+      ? `M ${(halfW + ROUTE_LENGTH_LANDSCAPE).toFixed(2)},${(canvasHeight * 0.5).toFixed(2)} L ${canvasWidth.toFixed(2)},${(canvasHeight * 0.5).toFixed(2)}`
+      : `M ${(canvasWidth * 0.5).toFixed(2)},${(halfH + ROUTE_LENGTH_PORTRAIT).toFixed(2)} L ${(canvasWidth * 0.5).toFixed(2)},${canvasHeight.toFixed(2)}`;
 
     const milestonePoints = ROUTE_MILESTONES.map((m) => {
       const crossFrac = getTrackCrossPercent(m.t) / 100;
@@ -461,24 +660,42 @@ export function InteractiveMap({
     return { activePathD, northExtensionD, southExtensionD, milestonePoints };
   }, [isLandscape, halfW, halfH, canvasWidth, canvasHeight]);
 
-  // Current cross-axis percent for the viewport-centered 莒光號列車
-  const trainCrossPercent = getTrackCrossPercent(scrollProgress);
+  // Exact pixel coordinate for the viewport-centered 莒光167次 train so it always rides dead-center on the track
+  const trainCrossPx =
+    (getTrackCrossPercent(scrollProgress) / 100) * (isLandscape ? canvasHeight : canvasWidth);
 
   return (
     <div className="relative w-full h-full bg-[#2b231d] text-[#FCFAF2] overflow-hidden select-none">
-      {/* ================= FLOATING LIGHTWEIGHT CENTER SHENGXING BUTTON ================= */}
-      <button
-        type="button"
-        onClick={() => {
-          centerOnShengxing(true);
-          soundEngine.playSelectClick();
-        }}
-        className="absolute top-4 right-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0C0C0C]/65 hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-wider backdrop-blur-md border border-[#FCFAF2]/20 shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
-        title="視角立即置中勝興車站"
-      >
-        <RotateCcw className="w-3.5 h-3.5 text-[#FFBA84]" aria-hidden="true" />
-        <span className="font-serif">置中勝興</span>
-      </button>
+      {/* ================= FLOATING TOP-RIGHT CONTROLS: '?' GUIDE + CENTER SHENGXING ================= */}
+      <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleOnboardingGuide}
+          aria-expanded={onboardingPhase === 'visible' || onboardingPhase === 'entering'}
+          aria-label="開啟地圖導覽指南"
+          title="地圖導覽指南"
+          className={`inline-flex items-center justify-center w-8 h-8 rounded-full backdrop-blur-md border shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+            onboardingPhase === 'visible' || onboardingPhase === 'entering'
+              ? 'bg-[#F05E1C] border-[#FFBA84] text-[#FCFAF2]'
+              : 'bg-[#0C0C0C]/65 hover:bg-[#F05E1C] border-[#FCFAF2]/20 text-[#FFBA84] hover:text-[#FCFAF2]'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4" aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            centerOnShengxing(true);
+            soundEngine.playSelectClick();
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0C0C0C]/65 hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-wider backdrop-blur-md border border-[#FCFAF2]/20 shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
+          title="視角立即置中勝興車站"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-[#FFBA84]" aria-hidden="true" />
+          <span className="font-serif">置中勝興</span>
+        </button>
+      </div>
 
       {/* ================= DEBUG MODE FLOATING BANNER (TOGGLED VIA 'D' KEY) ================= */}
       {isDebugMode && (
@@ -524,48 +741,112 @@ export function InteractiveMap({
         </div>
       )}
 
-      {/* ================= DIRECTION INDICATORS AT VIEWPORT EDGES ================= */}
+      {/* ================= DIRECTION INDICATORS AT VIEWPORT EDGES (4s intro fade + directional reveal) ================= */}
       {isLandscape ? (
         <>
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-20 px-2 py-3 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] writing-vertical-rl flex items-center justify-center">
+          <div
+            aria-hidden={!showNorthHint}
+            className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-20 px-2 py-3 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] writing-vertical-rl flex items-center justify-center transition-opacity duration-700 ease-out ${
+              showNorthHint ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             <span>← 北 · 三義起點</span>
           </div>
-          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-20 px-2 py-3 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] writing-vertical-rl flex items-center justify-center">
+          <div
+            aria-hidden={!showSouthHint}
+            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-20 px-2 py-3 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] writing-vertical-rl flex items-center justify-center transition-opacity duration-700 ease-out ${
+              showSouthHint ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             <span>南 · 豐原終點 →</span>
           </div>
         </>
       ) : (
         <>
-          <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap">
+          <div
+            aria-hidden={!showNorthHint}
+            className={`pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap transition-opacity duration-700 ease-out ${
+              showNorthHint ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             <span>↑ 北 · 三義起點</span>
           </div>
-          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap">
+          <div
+            aria-hidden={!showSouthHint}
+            className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-[#0C0C0C]/75 backdrop-blur-xs border border-[#FCFAF2]/15 text-[11px] tracking-[0.16em] text-[#FFBA84] whitespace-nowrap transition-opacity duration-700 ease-out ${
+              showSouthHint ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             <span>↓ 南 · 豐原終點</span>
           </div>
         </>
       )}
 
-      {/* ================= ⑫ CENTERED MOVING TRAIN (保持畫面中心 · 隨滑動沿鐵軌行駛) ================= */}
+      {/* ================= FIRST-VISIT EXPLORATION ONBOARDING DIALOG (漸顯漸隱探索導引) ================= */}
+      {onboardingPhase !== 'hidden' && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`pointer-events-auto absolute left-1/2 -translate-x-1/2 z-40 w-[min(90vw,360px)] sm:w-[min(86vw,420px)] bg-[#0C0C0C]/92 backdrop-blur-md border border-[#FFBA84]/50 text-[#FCFAF2] shadow-[0_14px_40px_rgba(0,0,0,0.78)] transition-all duration-700 ease-out ${
+            isLandscape ? 'top-5' : 'top-14'
+          } ${
+            onboardingPhase === 'visible'
+              ? 'opacity-100 translate-y-0'
+              : 'opacity-0 -translate-y-2 pointer-events-none'
+          }`}
+        >
+          <div className="h-[2px] bg-[#F05E1C]" />
+          <div className="px-4 py-3 flex items-start gap-3">
+            <HelpCircle className="w-4 h-4 text-[#FFBA84] shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-xs sm:text-[13px] leading-[1.7] tracking-[0.06em] text-[#FCFAF2]">
+                {!isLandscape || isTouchDevice
+                  ? '上下滑動畫面，沿著舊山線探索沿途風景。'
+                  : '滑動滑鼠滾輪或拖曳畫面，沿著舊山線探索沿途風景。'}
+              </p>
+              <p className="text-[11px] sm:text-xs leading-[1.65] tracking-[0.05em] text-[#FFBA84]/90">
+                點擊地圖上的站牌與物件，發掘歷史故事與意想不到的小彩蛋！
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissOnboarding}
+              aria-label="關閉探索提示"
+              className="shrink-0 inline-flex items-center justify-center w-6 h-6 text-[#FCFAF2]/55 hover:text-[#FFBA84] transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= ⑫ CENTERED MOVING TRAIN (鎖定鐵路正中央 · 隨滑動沿鐵軌行駛) ================= */}
       <div
-        className="pointer-events-none absolute inset-0 z-25 overflow-hidden"
+        ref={trainOverlayRef}
+        className="pointer-events-none absolute top-0 left-0 z-25 overflow-hidden"
+        style={{
+          width: `${viewportSize.width}px`,
+          height: `${viewportSize.height}px`,
+        }}
         aria-live="off"
       >
         <button
+          ref={trainButtonRef}
           type="button"
           data-map-interactive="true"
           onClick={handleTrainClick}
-          title="莒光號列車正面（點擊鳴笛並閱讀列車故事）"
-          className="pointer-events-auto group absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform duration-150 hover:scale-115 active:scale-95 drop-shadow-[0_6px_16px_rgba(0,0,0,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFBA84]"
+          title="莒光167次（點擊鳴笛並閱讀列車故事）"
+          className="pointer-events-auto group absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center p-0 m-0 border-0 leading-none cursor-pointer transition-transform duration-150 hover:scale-115 active:scale-95 drop-shadow-[0_6px_16px_rgba(0,0,0,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFBA84]"
           style={
             isLandscape
-              ? { left: '50%', top: `${trainCrossPercent}%` }
-              : { left: `${trainCrossPercent}%`, top: '50%' }
+              ? { left: `${halfW}px`, top: `${trainCrossPx}px` }
+              : { left: `${trainCrossPx}px`, top: `${halfH}px` }
           }
         >
           <MapIconImage
             iconFile={TRAIN_167_OBJECT.mapIcon || PUBLIC_ASSETS.images.uiTrain167}
-            alt="莒光號列車正面"
-            className="w-14 h-14 sm:w-16 sm:h-16 object-contain filter contrast-110"
+            alt="莒光167次"
+            className="block w-14 h-14 sm:w-16 sm:h-16 object-contain filter contrast-110"
             fallback={
               <div className="relative flex items-center justify-center w-12 h-12 rounded-full bg-[#F05E1C] border-2 border-[#FFBA84] text-[#FCFAF2] shadow-[0_0_20px_rgba(240,94,28,0.85)] group-hover:bg-[#d85014] transition-colors">
                 <TrainFront className="w-6 h-6 text-[#FCFAF2]" aria-hidden="true" />
@@ -598,125 +879,155 @@ export function InteractiveMap({
             backgroundPosition: 'center',
           }}
         >
-          {/* Archival Topographic Contour & Surveyor Grid Overlay */}
+          {/* Subtle Archival Surveyor Grid Overlay */}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 opacity-25"
             style={{
               backgroundImage: `
-                radial-gradient(ellipse at 35% 40%, rgba(255, 186, 132, 0.12) 0%, transparent 60%),
-                radial-gradient(ellipse at 65% 65%, rgba(240, 94, 28, 0.1) 0%, transparent 65%),
                 linear-gradient(to right, rgba(252, 250, 242, 0.03) 1px, transparent 1px),
                 linear-gradient(to bottom, rgba(252, 250, 242, 0.03) 1px, transparent 1px)
               `,
-              backgroundSize: '100% 100%, 100% 100%, 80px 80px, 80px 80px',
+              backgroundSize: '80px 80px, 80px 80px',
             }}
           />
 
           {/* ================= CONTINUOUS RAILWAY TRACK SVG (含北端三義外＆南端豐原外淡色延伸) ================= */}
           <svg
+            width={canvasWidth}
+            height={canvasHeight}
             className="pointer-events-none absolute inset-0 w-full h-full z-10"
             viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
           >
             <defs>
-              <filter id="track-shadow" x="-5%" y="-5%" width="110%" height="110%">
-                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0C0C0C" floodOpacity="0.8" />
+              {/* Crisp grounded shadow for refined railway depth */}
+              <filter
+                id="track-shadow"
+                filterUnits="userSpaceOnUse"
+                x="0"
+                y="0"
+                width={canvasWidth}
+                height={canvasHeight}
+              >
+                <feDropShadow dx="0" dy="3" stdDeviation="3.5" floodColor="#070504" floodOpacity="0.72" />
               </filter>
 
-              {/* North faded extension gradient (fades smoothly from outer edge to Sanyi) */}
+              {/* North faded extension gradients (dark casing & cream dashes fade smoothly outward) */}
               <linearGradient
-                id="north-ext-fade"
+                id="north-casing-fade"
                 gradientUnits="userSpaceOnUse"
                 x1="0"
                 y1="0"
                 x2={isLandscape ? halfW : 0}
                 y2={isLandscape ? 0 : halfH}
               >
-                <stop offset="0%" stopColor="#9B9085" stopOpacity="0.06" />
-                <stop offset="65%" stopColor="#B8ACA0" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#D6CBC0" stopOpacity="0.38" />
+                <stop offset="0%" stopColor="#12100E" stopOpacity="0.05" />
+                <stop offset="65%" stopColor="#12100E" stopOpacity="0.32" />
+                <stop offset="100%" stopColor="#12100E" stopOpacity="0.62" />
+              </linearGradient>
+              <linearGradient
+                id="north-dash-fade"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1="0"
+                x2={isLandscape ? halfW : 0}
+                y2={isLandscape ? 0 : halfH}
+              >
+                <stop offset="0%" stopColor="#F7F3E8" stopOpacity="0.05" />
+                <stop offset="65%" stopColor="#F7F3E8" stopOpacity="0.24" />
+                <stop offset="100%" stopColor="#F7F3E8" stopOpacity="0.48" />
               </linearGradient>
 
-              {/* South faded extension gradient (fades smoothly from Fengyuan to outer edge) */}
+              {/* South faded extension gradients */}
               <linearGradient
-                id="south-ext-fade"
+                id="south-casing-fade"
                 gradientUnits="userSpaceOnUse"
                 x1={isLandscape ? halfW + ROUTE_LENGTH_LANDSCAPE : 0}
                 y1={isLandscape ? 0 : halfH + ROUTE_LENGTH_PORTRAIT}
                 x2={isLandscape ? canvasWidth : 0}
                 y2={isLandscape ? 0 : canvasHeight}
               >
-                <stop offset="0%" stopColor="#D6CBC0" stopOpacity="0.38" />
-                <stop offset="35%" stopColor="#B8ACA0" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#9B9085" stopOpacity="0.06" />
+                <stop offset="0%" stopColor="#12100E" stopOpacity="0.62" />
+                <stop offset="35%" stopColor="#12100E" stopOpacity="0.32" />
+                <stop offset="100%" stopColor="#12100E" stopOpacity="0.05" />
+              </linearGradient>
+              <linearGradient
+                id="south-dash-fade"
+                gradientUnits="userSpaceOnUse"
+                x1={isLandscape ? halfW + ROUTE_LENGTH_LANDSCAPE : 0}
+                y1={isLandscape ? 0 : halfH + ROUTE_LENGTH_PORTRAIT}
+                x2={isLandscape ? canvasWidth : 0}
+                y2={isLandscape ? 0 : canvasHeight}
+              >
+                <stop offset="0%" stopColor="#F7F3E8" stopOpacity="0.48" />
+                <stop offset="35%" stopColor="#F7F3E8" stopOpacity="0.24" />
+                <stop offset="100%" stopColor="#F7F3E8" stopOpacity="0.05" />
               </linearGradient>
             </defs>
 
-            {/* --- 1. NORTH FADED CONTINUOUS EXTENSION (三義以北 · 較淡顏色不可再滑動) --- */}
+            {/* --- 1. NORTH FADED CONTINUOUS EXTENSION (三義以北 · 同寬 11px/6px 與等距 16/16 黑白節奏) --- */}
             <path
               d={trackGeometry.northExtensionD}
               fill="none"
-              stroke="url(#north-ext-fade)"
-              strokeWidth="10"
+              stroke="url(#north-casing-fade)"
+              strokeWidth="11"
               strokeLinecap="butt"
-              opacity="0.45"
             />
             <path
               d={trackGeometry.northExtensionD}
               fill="none"
-              stroke="url(#north-ext-fade)"
-              strokeWidth="5"
-              strokeDasharray="14 14"
+              stroke="url(#north-dash-fade)"
+              strokeWidth="6"
+              strokeDasharray="16 16"
               strokeLinecap="butt"
             />
 
-            {/* --- 2. SOUTH FADED CONTINUOUS EXTENSION (豐原以南 · 較淡顏色不可再滑動) --- */}
+            {/* --- 2. SOUTH FADED CONTINUOUS EXTENSION (豐原以南 · 同寬 11px/6px 與等距 16/16 黑白節奏) --- */}
             <path
               d={trackGeometry.southExtensionD}
               fill="none"
-              stroke="url(#south-ext-fade)"
-              strokeWidth="10"
+              stroke="url(#south-casing-fade)"
+              strokeWidth="11"
               strokeLinecap="butt"
-              opacity="0.45"
             />
             <path
               d={trackGeometry.southExtensionD}
               fill="none"
-              stroke="url(#south-ext-fade)"
-              strokeWidth="5"
-              strokeDasharray="14 14"
+              stroke="url(#south-dash-fade)"
+              strokeWidth="6"
+              strokeDasharray="16 16"
               strokeLinecap="butt"
             />
 
-            {/* --- 3. ACTIVE OLD MOUNTAIN LINE TRACK (三義 ⟷ 豐原) --- */}
-            {/* Base ballast bed */}
+            {/* --- 3. ACTIVE OLD MOUNTAIN LINE TRACK (三義 ⟷ 豐原 · 精細對稱外框 2.5px + 16/16 等距黑白鐵道) --- */}
+            {/* Subtle neutral hairline rim to separate dark rail casing cleanly from topographic ground */}
             <path
               d={trackGeometry.activePathD}
               fill="none"
-              stroke="#0C0C0C"
-              strokeWidth="14"
-              strokeLinecap="round"
+              stroke="rgba(252, 250, 242, 0.1)"
+              strokeWidth="12.5"
+              strokeLinecap="butt"
+              strokeLinejoin="round"
+            />
+
+            {/* Main dark rail bed casing with soft elevation + contact shadow (2.5px uniform border each side) */}
+            <path
+              d={trackGeometry.activePathD}
+              fill="none"
+              stroke="#12100E"
+              strokeWidth="11"
+              strokeLinecap="butt"
               strokeLinejoin="round"
               filter="url(#track-shadow)"
             />
 
-            {/* Rail foundation line */}
+            {/* Uniform 1:1 cartographic ivory/black alternating railway dashes (16px white / 16px dark) */}
             <path
               d={trackGeometry.activePathD}
               fill="none"
-              stroke="#2d2621"
-              strokeWidth="10"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Classic cartographic black-and-white railway dashes */}
-            <path
-              d={trackGeometry.activePathD}
-              fill="none"
-              stroke="#FCFAF2"
-              strokeWidth="5.5"
-              strokeDasharray="16 14"
+              stroke="#F7F3E8"
+              strokeWidth="6"
+              strokeDasharray="16 16"
               strokeLinecap="butt"
               strokeLinejoin="round"
             />
@@ -724,7 +1035,7 @@ export function InteractiveMap({
             {/* Subtle decorative station mileage nodes along the track (non-interactive) */}
             {trackGeometry.milestonePoints.map((pt) => (
               <g key={pt.label}>
-                <circle cx={pt.x} cy={pt.y} r="7" fill="#0C0C0C" stroke="#FFBA84" strokeWidth="2" />
+                <circle cx={pt.x} cy={pt.y} r="7" fill="#12100E" stroke="#FFBA84" strokeWidth="2" />
                 <circle cx={pt.x} cy={pt.y} r="2.5" fill="#F05E1C" />
               </g>
             ))}
@@ -930,25 +1241,29 @@ export function InteractiveMap({
       <div
         className={`absolute left-0 z-30 flex flex-col justify-between overflow-hidden bg-[#0C0C0C]/90 backdrop-blur-md border border-l-0 border-[#FFBA84]/35 shadow-2xl text-[#FCFAF2] ${
           isLandscape
-            ? 'bottom-5 w-[108px] h-[56px] px-2.5 py-2'
+            ? 'bottom-5 w-[132px] h-[68px] px-3.5 py-2.5'
             : 'bottom-14 w-[96px] h-[50px] px-2 py-1.5'
         }`}
       >
-        <div className="text-[10px] leading-none tracking-[0.1em] text-[#FFBA84] border-b border-[#FCFAF2]/15 pb-1 whitespace-nowrap">
+        <div
+          className={`leading-none tracking-[0.1em] text-[#FFBA84] border-b border-[#FCFAF2]/15 whitespace-nowrap ${
+            isLandscape ? 'text-xs pb-1.5' : 'text-[10px] pb-1'
+          }`}
+        >
           <span>距起點三義：</span>
         </div>
 
         <div className="flex items-baseline gap-1 leading-none whitespace-nowrap">
           <span
             className={`font-mono tabular-nums font-semibold tracking-tight text-[#FFBA84] ${
-              isLandscape ? 'text-xl' : 'text-base'
+              isLandscape ? 'text-2xl' : 'text-base'
             }`}
           >
             {currentDistanceKm.toFixed(1)}
           </span>
           <span
             className={`font-mono text-[#FCFAF2]/70 ${
-              isLandscape ? 'text-[11px]' : 'text-[10px]'
+              isLandscape ? 'text-xs' : 'text-[10px]'
             }`}
           >
             公里

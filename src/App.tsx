@@ -23,6 +23,10 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [hasTicket, setHasTicket] = useState(false);
+  const [shouldNudgeMenu, setShouldNudgeMenu] = useState(false);
+  const [hasClickedMenu, setHasClickedMenu] = useState(false);
+  const hasClickedMenuRef = useRef(false);
+  const nudgeTimerRef = useRef<number | null>(null);
 
   // Sync browser document title whenever route changes
   useEffect(() => {
@@ -61,6 +65,42 @@ export default function App() {
       soundEngine.dispose();
     };
   }, []);
+
+  // After 1 minute from entering the website, show the orange dot on the menu icon
+  // ONLY if the user has never clicked the menu or visited another tab within that first minute
+  useEffect(() => {
+    if (hasClickedMenu) {
+      if (nudgeTimerRef.current !== null) {
+        window.clearTimeout(nudgeTimerRef.current);
+        nudgeTimerRef.current = null;
+      }
+      setShouldNudgeMenu(false);
+      return;
+    }
+
+    nudgeTimerRef.current = window.setTimeout(() => {
+      nudgeTimerRef.current = null;
+      if (!hasClickedMenuRef.current) {
+        setShouldNudgeMenu(true);
+      }
+    }, 60_000);
+
+    return () => {
+      if (nudgeTimerRef.current !== null) {
+        window.clearTimeout(nudgeTimerRef.current);
+        nudgeTimerRef.current = null;
+      }
+    };
+  }, [hasClickedMenu]);
+
+  // If user switches to any other exhibition tab (e.g. via footer), mark menu/tabs as explored
+  useEffect(() => {
+    if (route.stage === 'main' && route.tab !== 'explore' && !hasClickedMenuRef.current) {
+      hasClickedMenuRef.current = true;
+      setHasClickedMenu(true);
+      setShouldNudgeMenu(false);
+    }
+  }, [route.stage, route.tab]);
 
   // Push a new entry onto browser history so Back / Forward work naturally without trapping reloads on a stale hash
   const navigateTo = useCallback(
@@ -179,12 +219,18 @@ export default function App() {
             activeTab={route.tab}
             onSelectTab={handleSelectTab}
             isMenuOpen={isMenuOpen}
-            onToggleMenu={() => setIsMenuOpen((prev) => !prev)}
+            onToggleMenu={() => {
+              hasClickedMenuRef.current = true;
+              setHasClickedMenu(true);
+              setShouldNudgeMenu(false);
+              setIsMenuOpen((prev) => !prev);
+            }}
             onCloseMenu={() => setIsMenuOpen(false)}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
             onReplayPrologue={handleReplayPrologue}
             onOpenTicketMachine={handleOpenTicketMachine}
+            shouldNudgeMenu={shouldNudgeMenu && !hasClickedMenu && route.tab === 'explore'}
           />
           <ExhibitionMain
             activeTab={route.tab}

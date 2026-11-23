@@ -48,7 +48,7 @@ export function PrologueStage({ onComplete }: PrologueStageProps) {
       {/* Subtle atmospheric vignette evoking night mountain mist */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(240,94,28,0.08)_0%,rgba(12,12,12,0.96)_62%,#0C0C0C_100%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(240,94,28,0.08)_0%,rgba(12,12,12,0.96)_62%,#0C0C0C_100%)]"
       />
 
       {/* Quiet exhibition date index at top-left */}

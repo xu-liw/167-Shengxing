@@ -178,7 +178,7 @@ export function ExhibitionMain({
                         onClick={() => setExpandedPlateId(isExpanded ? '' : plate.id)}
                         aria-expanded={isExpanded}
                         aria-controls={`archive-panel-${plate.id}`}
-                        className={`w-full text-left py-4 px-3 -mx-3 flex items-center justify-between gap-4 transition-colors duration-300 cursor-pointer ${
+                        className={`w-full mx-0 box-border text-left py-4 px-4 sm:px-5 flex items-center justify-between gap-4 transition-colors duration-300 cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#F05E1C] ${
                           isExpanded ? 'bg-[#FFBA84]/20' : 'hover:bg-[#FFBA84]/10'
                         }`}
                       >
@@ -232,7 +232,7 @@ export function ExhibitionMain({
                       >
                         <div className="overflow-hidden">
                           <div
-                            className={`pt-5 pb-8 px-1 sm:px-3 grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            className={`pt-5 pb-8 px-4 sm:px-5 grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                               isExpanded ? 'translate-y-0' : '-translate-y-3'
                             }`}
                           >
@@ -397,7 +397,7 @@ export function ExhibitionMain({
               {CULTURAL_LINKS.map((item, idx) => {
                 const hasUrl = Boolean(item.url);
                 const content = (
-                  <div className="py-6 px-3 -mx-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors hover:bg-[#FFBA84]/12">
+                  <div className="w-full mx-0 box-border py-6 px-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors group-hover:bg-[#FFBA84]/12">
                     <div className="flex items-baseline gap-4 min-w-0">
                       <span className="text-xs font-mono tabular-nums text-[#F05E1C] shrink-0">
                         {String(idx + 1).padStart(2, '0')}
@@ -432,12 +432,12 @@ export function ExhibitionMain({
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C]"
+                        className="group block w-full focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#F05E1C]"
                       >
                         {content}
                       </a>
                     ) : (
-                      <div className="group">{content}</div>
+                      <div className="group w-full">{content}</div>
                     )}
                   </div>
                 );
@@ -464,7 +464,7 @@ export function ExhibitionMain({
 
               {/* Required Curatorial Team Credits */}
               <div className="md:col-span-5 space-y-2.5 text-sm">
-                <p className="text-xs tracking-[0.2em] text-[#FFBA84]">製作與策展團隊</p>
+                <p className="text-xs tracking-[0.2em] text-[#FFBA84]">製作與策展</p>
                 <p className="text-[#FCFAF2]/90 tracking-[0.08em]">
                   <span className="text-[#FCFAF2]/55 mr-2">指導老師</span>
                   涂卉 副教授

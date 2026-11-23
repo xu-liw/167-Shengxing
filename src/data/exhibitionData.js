@@ -351,11 +351,11 @@ export const MAP_OBJECTS = [
 ];
 
 /**
- * ⑫ 莒光號列車正面（保持於畫面中心、隨滑動沿鐵路移動，點擊鳴笛並開啟介紹彈窗）
+ * ⑫ 莒光167次（保持於畫面中心、隨滑動沿鐵路移動，點擊鳴笛並開啟介紹彈窗）
  */
 export const TRAIN_167_OBJECT = {
   id: 'train-167',
-  name: '莒光號列車正面',
+  name: '莒光167次',
   shortName: '167 次莒光號',
   type: 'train',
   kmMark: 'K164+600',
