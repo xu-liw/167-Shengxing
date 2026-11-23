@@ -666,40 +666,39 @@ export function InteractiveMap({
 
   return (
     <div className="relative w-full h-full bg-[#2b231d] text-[#FCFAF2] overflow-hidden select-none">
-      {/* ================= FLOATING TOP-RIGHT CONTROLS: '?' GUIDE + CENTER SHENGXING ================= */}
-      <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={toggleOnboardingGuide}
-          aria-expanded={onboardingPhase === 'visible' || onboardingPhase === 'entering'}
-          aria-label="開啟地圖導覽指南"
-          title="地圖導覽指南"
-          className={`inline-flex items-center justify-center w-8 h-8 rounded-full backdrop-blur-md border shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-            onboardingPhase === 'visible' || onboardingPhase === 'entering'
-              ? 'bg-[#F05E1C] border-[#FFBA84] text-[#FCFAF2]'
-              : 'bg-[#0C0C0C]/65 hover:bg-[#F05E1C] border-[#FCFAF2]/20 text-[#FFBA84] hover:text-[#FCFAF2]'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" aria-hidden="true" />
-        </button>
+      {/* ================= FLOATING TOP-LEFT MAP GUIDE BUTTON ('?') ================= */}
+      <button
+        type="button"
+        onClick={toggleOnboardingGuide}
+        aria-expanded={onboardingPhase === 'visible' || onboardingPhase === 'entering'}
+        aria-label="開啟地圖導覽指南"
+        title="地圖導覽指南"
+        className={`absolute top-4 left-4 z-30 inline-flex items-center justify-center w-8 h-8 rounded-full backdrop-blur-md border shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+          onboardingPhase === 'visible' || onboardingPhase === 'entering'
+            ? 'bg-[#F05E1C] border-[#FFBA84] text-[#FCFAF2]'
+            : 'bg-[#0C0C0C]/65 hover:bg-[#F05E1C] border-[#FCFAF2]/20 text-[#FFBA84] hover:text-[#FCFAF2]'
+        }`}
+      >
+        <HelpCircle className="w-4 h-4" aria-hidden="true" />
+      </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            centerOnShengxing(true);
-            soundEngine.playSelectClick();
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0C0C0C]/65 hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-wider backdrop-blur-md border border-[#FCFAF2]/20 shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
-          title="視角立即置中勝興車站"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-[#FFBA84]" aria-hidden="true" />
-          <span className="font-serif">置中勝興</span>
-        </button>
-      </div>
+      {/* ================= FLOATING LIGHTWEIGHT CENTER SHENGXING BUTTON ================= */}
+      <button
+        type="button"
+        onClick={() => {
+          centerOnShengxing(true);
+          soundEngine.playSelectClick();
+        }}
+        className="absolute top-4 right-4 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0C0C0C]/65 hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-wider backdrop-blur-md border border-[#FCFAF2]/20 shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
+        title="視角立即置中勝興車站"
+      >
+        <RotateCcw className="w-3.5 h-3.5 text-[#FFBA84]" aria-hidden="true" />
+        <span className="font-serif">置中勝興</span>
+      </button>
 
       {/* ================= DEBUG MODE FLOATING BANNER (TOGGLED VIA 'D' KEY) ================= */}
       {isDebugMode && (
-        <div className="absolute top-4 left-4 z-30 px-3.5 py-2 bg-[#FFBA84] text-[#0C0C0C] border border-[#0C0C0C]/40 rounded shadow-xl flex items-center gap-2.5 text-xs animate-notice-enter">
+        <div className="absolute top-4 left-14 z-30 px-3.5 py-2 bg-[#FFBA84] text-[#0C0C0C] border border-[#0C0C0C]/40 rounded shadow-xl flex items-center gap-2.5 text-xs animate-notice-enter">
           <div className="flex items-center gap-1.5">
             <Move className="w-3.5 h-3.5 text-[#0B346E]" aria-hidden="true" />
             <span className="font-semibold font-mono">[DEBUG 拖曳模式]</span>
