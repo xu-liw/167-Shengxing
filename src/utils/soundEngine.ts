@@ -1,6 +1,7 @@
 // Exhibition Sound Engine for 《167次-勝興》
 // Supports real MP3 assets placed in /public/audio/ with automatic Web Audio API synthesized fallback.
 // Respects Vite base URL (for GitHub Pages `/167-Shengxing/`) and iOS Safari audio session / silent-switch rules.
+// Automatically suspends all audio contexts, loops, and timers when the page leaves the foreground.
 
 import { PUBLIC_ASSETS, resolvePublicAsset } from './assetResolver';
 
@@ -13,6 +14,11 @@ function detectIOSDevice(): boolean {
     /iPad|iPhone|iPod/i.test(ua) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   );
+}
+
+function isPageInBackground(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.hidden || document.visibilityState === 'hidden';
 }
 
 /**
@@ -46,7 +52,6 @@ function createSilentWavDataUri(): string {
   view.setUint16(34, 16, true); // BitsPerSample
   writeStr(36, 'data');
   view.setUint32(40, dataSize, true);
-  // Remaining PCM bytes are already 0x00 (pure silence, zero click/pop)
 
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -64,6 +69,7 @@ class ExhibitionSoundEngine {
   private isMuted = false;
   private pulseInterval: number | null = null;
   private isIOS = false;
+  private isSuspendedInBackground = false;
 
   // Silent HTML5 <audio> channel keeper for iOS Safari (bypasses hardware silent switch for Web Audio)
   private iosUnmuteAudio: HTMLAudioElement | null = null;
@@ -82,6 +88,8 @@ class ExhibitionSoundEngine {
 
   private boundUnlockHandler: (() => void) | null = null;
   private boundVisibilityHandler: (() => void) | null = null;
+  private boundPageHideHandler: (() => void) | null = null;
+  private boundPageShowHandler: (() => void) | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -92,12 +100,12 @@ class ExhibitionSoundEngine {
     }
   }
 
-  private configureAudioSession(): void {
+  private configureAudioSession(type: 'playback' | 'ambient' = 'playback'): void {
     if (typeof navigator === 'undefined') return;
     const nav = navigator as Navigator & { audioSession?: { type: string } };
-    if (nav.audioSession && nav.audioSession.type !== 'playback') {
+    if (nav.audioSession && nav.audioSession.type !== type) {
       try {
-        nav.audioSession.type = 'playback';
+        nav.audioSession.type = type;
       } catch {
         // Ignore if browser does not allow changing audioSession type
       }
@@ -106,9 +114,9 @@ class ExhibitionSoundEngine {
 
   private ensureIOSPlaybackChannel(): void {
     if (!this.isIOS || this.isMuted || typeof window === 'undefined') return;
-    if (typeof document !== 'undefined' && document.hidden) return;
+    if (isPageInBackground()) return;
 
-    this.configureAudioSession();
+    this.configureAudioSession('playback');
 
     if (!this.iosUnmuteAudio) {
       if (!this.silentWavUri) {
@@ -120,7 +128,6 @@ class ExhibitionSoundEngine {
       audio.setAttribute('playsinline', 'true');
       audio.setAttribute('webkit-playsinline', 'true');
       (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
-      // Keep audible channel active without muting the HTMLAudioElement (muted=true won't switch iOS channel)
       audio.volume = 0.01;
       this.iosUnmuteAudio = audio;
     }
@@ -138,45 +145,143 @@ class ExhibitionSoundEngine {
         // Ignore
       }
     }
+    this.configureAudioSession('ambient');
+  }
+
+  private startSynthPulseTimer(): void {
+    if (this.pulseInterval !== null || typeof window === 'undefined') return;
+    this.pulseInterval = window.setInterval(() => {
+      if (
+        this.isMuted ||
+        this.isSuspendedInBackground ||
+        isPageInBackground() ||
+        this.bgmMode !== 'synth' ||
+        !this.ctx ||
+        !this.ambientGain ||
+        this.ctx.state !== 'running'
+      ) {
+        return;
+      }
+      const now = this.ctx.currentTime;
+      const triggerClick = (offset: number, freq: number) => {
+        if (!this.ctx || !this.ambientGain) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + offset);
+        osc.frequency.exponentialRampToValueAtTime(36, now + offset + 0.09);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.linearRampToValueAtTime(0.24, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
+        osc.connect(gain);
+        gain.connect(this.ambientGain);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.12);
+      };
+      triggerClick(0, 74);
+      triggerClick(0.22, 62);
+    }, 1550);
+  }
+
+  private stopSynthPulseTimer(): void {
+    if (this.pulseInterval !== null) {
+      clearInterval(this.pulseInterval);
+      this.pulseInterval = null;
+    }
+  }
+
+  /**
+   * Immediately halts all Web Audio processing, timers, and HTMLAudio streams
+   * so iOS Safari does not keep the tab alive or heat up the device in the background.
+   */
+  public suspendForBackground(): void {
+    this.isSuspendedInBackground = true;
+    this.stopSynthPulseTimer();
+    this.pauseIOSPlaybackChannel();
+
+    if (this.bgmAudio && !this.bgmAudio.paused) {
+      try {
+        this.bgmAudio.pause();
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (this.ctx && this.ctx.state === 'running') {
+      this.ctx.suspend().catch(() => {});
+    }
+  }
+
+  /**
+   * Restores audio playback only when the page returns to the active foreground and is not muted.
+   */
+  public resumeFromForeground(): void {
+    if (isPageInBackground()) return;
+    this.isSuspendedInBackground = false;
+
+    if (this.isMuted) return;
+
+    this.ensureIOSPlaybackChannel();
+
+    if (this.ctx && this.ctx.state !== 'running') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    if (this.synthAmbientRunning && this.bgmMode === 'synth') {
+      this.startSynthPulseTimer();
+    }
+
+    if (this.bgmWanted && this.bgmMode === 'mp3' && this.bgmAudio && this.bgmAudio.paused) {
+      this.bgmAudio.play().catch(() => {});
+    }
   }
 
   private setupGlobalGestureUnlock(): void {
     const handler = () => {
-      this.unlock();
+      if (!isPageInBackground()) {
+        this.unlock();
+      }
     };
     this.boundUnlockHandler = handler;
 
-    // On iOS Safari, touchend & click are the most reliable user-activation gestures for audio unlock.
-    // We keep listeners attached so returning from background / 'interrupted' state always re-unlocks cleanly.
     window.addEventListener('touchend', handler, { passive: true, capture: true });
     window.addEventListener('click', handler, { passive: true, capture: true });
     window.addEventListener('keydown', handler, { passive: true, capture: true });
   }
 
   private setupVisibilityHandling(): void {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
     const onVisibility = () => {
-      if (document.hidden) {
-        this.pauseIOSPlaybackChannel();
-        if (this.bgmAudio && !this.bgmAudio.paused) {
-          this.bgmAudio.pause();
-        }
-      } else if (!this.isMuted) {
-        if (this.ctx && this.ctx.state !== 'running') {
-          this.ctx.resume().catch(() => {});
-        }
-        if (this.bgmWanted && this.bgmMode === 'mp3' && this.bgmAudio && this.bgmAudio.paused) {
-          this.bgmAudio.play().catch(() => {});
-        }
+      if (isPageInBackground()) {
+        this.suspendForBackground();
+      } else {
+        this.resumeFromForeground();
       }
     };
+
+    const onPageHide = () => {
+      this.suspendForBackground();
+    };
+
+    const onPageShow = () => {
+      if (!isPageInBackground()) {
+        this.resumeFromForeground();
+      }
+    };
+
     this.boundVisibilityHandler = onVisibility;
+    this.boundPageHideHandler = onPageHide;
+    this.boundPageShowHandler = onPageShow;
+
     document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('freeze', onPageHide);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
   }
 
   /**
    * Pre-check which MP3 files exist under `${BASE_URL}audio/` on startup.
-   * Prevents 200ms+ 404 round-trips during clicks that would lose the browser user gesture.
    */
   private probeAllAudioFiles(): void {
     if (this.probeStarted || typeof fetch === 'undefined') return;
@@ -188,17 +293,14 @@ class ExhibitionSoundEngine {
       fetch(url, { method: 'HEAD' })
         .then((res) => {
           const contentType = (res.headers.get('content-type') || '').toLowerCase();
-          // Reject SPA/404 HTML fallback responses masquerading as 200
           const isRealAudio = res.ok && !contentType.includes('text/html');
           this.fileStatus.set(filename, isRealAudio ? 'available' : 'missing');
 
-          // Pre-load available SFX into Web Audio buffers once AudioContext exists
           if (isRealAudio && filename !== PUBLIC_ASSETS.audio.bgmOldMountainLine && this.ctx) {
             this.preloadSfxBuffer(filename);
           }
         })
         .catch(() => {
-          // Network or CORS issue on HEAD: leave as unknown so runtime fallback handles it
           if (!this.fileStatus.has(filename)) {
             this.fileStatus.set(filename, 'unknown');
           }
@@ -273,16 +375,16 @@ class ExhibitionSoundEngine {
    * to unlock AudioContext and iOS Safari's playback audio session.
    */
   public unlock(): void {
-    if (this.isMuted || typeof window === 'undefined') return;
+    if (this.isMuted || isPageInBackground() || typeof window === 'undefined') return;
+    this.isSuspendedInBackground = false;
 
-    this.configureAudioSession();
+    this.configureAudioSession('playback');
     this.ensureIOSPlaybackChannel();
 
     const ctx = this.ensureContext();
     if (ctx) {
       if (ctx.state !== 'running') {
         try {
-          // Play a 1-sample silent buffer synchronously to wake WebKit's audio graph
           const silentBuffer = ctx.createBuffer(1, 1, 22050);
           const source = ctx.createBufferSource();
           source.buffer = silentBuffer;
@@ -294,7 +396,6 @@ class ExhibitionSoundEngine {
         ctx.resume().catch(() => {});
       }
 
-      // Trigger pre-decoding for any MP3 SFX already confirmed available
       for (const [filename, status] of this.fileStatus.entries()) {
         if (status === 'available' && filename !== PUBLIC_ASSETS.audio.bgmOldMountainLine) {
           this.preloadSfxBuffer(filename);
@@ -302,7 +403,10 @@ class ExhibitionSoundEngine {
       }
     }
 
-    // Retry BGM playback if it was previously requested
+    if (this.synthAmbientRunning && this.bgmMode === 'synth') {
+      this.startSynthPulseTimer();
+    }
+
     if (this.bgmWanted && !this.isMuted) {
       if (this.bgmAudio && this.bgmAudio.paused && this.bgmMode !== 'synth') {
         this.bgmAudio
@@ -318,7 +422,7 @@ class ExhibitionSoundEngine {
   }
 
   private ensureContext(): AudioContext | null {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined' || isPageInBackground()) return null;
     if (!this.ctx) {
       const AudioCtx =
         window.AudioContext ||
@@ -329,19 +433,14 @@ class ExhibitionSoundEngine {
       this.masterGain.gain.value = this.isMuted ? 0 : 0.78;
       this.masterGain.connect(this.ctx.destination);
     }
-    // iOS Safari can transition AudioContext to 'suspended' OR 'interrupted'
-    if (this.ctx.state !== 'running') {
+    if (this.ctx.state !== 'running' && !isPageInBackground()) {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
   }
 
-  /**
-   * Executes Web Audio synthesis once the AudioContext is actually in 'running' state.
-   * Avoids silently dropping short sounds on the very first iOS Safari tap while ctx.resume() is pending.
-   */
   private runWithRunningContext(fn: (ctx: AudioContext, masterGain: GainNode) => void): void {
-    if (this.isMuted) return;
+    if (this.isMuted || isPageInBackground()) return;
     const ctx = this.ensureContext();
     const masterGain = this.masterGain;
     if (!ctx || !masterGain) return;
@@ -354,38 +453,37 @@ class ExhibitionSoundEngine {
     ctx
       .resume()
       .then(() => {
-        if (!this.isMuted && this.ctx && this.masterGain && this.ctx.state === 'running') {
+        if (
+          !this.isMuted &&
+          !isPageInBackground() &&
+          this.ctx &&
+          this.masterGain &&
+          this.ctx.state === 'running'
+        ) {
           fn(this.ctx, this.masterGain);
         }
       })
       .catch(() => {});
   }
 
-  /**
-   * Plays a real MP3 file under /public/audio/ when available, or immediately runs
-   * the synthesized Web Audio fallback with zero gesture loss.
-   */
   private playMp3OrFallback(
     filename: string,
     volume: number,
     fallbackFn: (ctx: AudioContext, masterGain: GainNode) => void
   ): void {
-    if (this.isMuted || typeof window === 'undefined') return;
+    if (this.isMuted || isPageInBackground() || typeof window === 'undefined') return;
 
-    // ALWAYS unlock/resume AudioContext & iOS playback session synchronously inside the current user gesture
-    this.configureAudioSession();
+    this.configureAudioSession('playback');
     this.ensureIOSPlaybackChannel();
     const ctx = this.ensureContext();
 
     const status = this.fileStatus.get(filename) ?? 'unknown';
 
-    // 1. Confirmed missing MP3 -> play Web Audio fallback cleanly once context is running
     if (status === 'missing') {
       this.runWithRunningContext(fallbackFn);
       return;
     }
 
-    // 2. Real MP3 already decoded as Web Audio buffer -> 0ms latency, works even inside setTimeout on iOS
     const cachedBuffer = this.sfxBuffers.get(filename);
     if (cachedBuffer && ctx && this.masterGain) {
       this.runWithRunningContext((runningCtx, master) => {
@@ -400,12 +498,10 @@ class ExhibitionSoundEngine {
       return;
     }
 
-    // Kick off Web Audio pre-decoding if confirmed available
     if (status === 'available' && ctx) {
       this.preloadSfxBuffer(filename);
     }
 
-    // 3. Try HTMLAudioElement playback (with instant fallback if 404 or decode error)
     let didFallback = false;
     const triggerFallback = (markMissing: boolean) => {
       if (markMissing) {
@@ -459,6 +555,7 @@ class ExhibitionSoundEngine {
         this.bgmMode = 'synth';
         this.ambientGain.gain.cancelScheduledValues(ctx.currentTime);
         this.ambientGain.gain.setTargetAtTime(0.085, ctx.currentTime, 0.3);
+        this.startSynthPulseTimer();
         return;
       }
 
@@ -467,7 +564,6 @@ class ExhibitionSoundEngine {
       this.ambientGain.gain.exponentialRampToValueAtTime(0.085, ctx.currentTime + 1.5);
       this.ambientGain.connect(masterGain);
 
-      // Filtered brown-like wind noise for misty mountain night atmosphere
       const bufferSize = ctx.sampleRate * 3;
       const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const data = noiseBuffer.getChannelData(0);
@@ -491,54 +587,22 @@ class ExhibitionSoundEngine {
       lowpass.connect(this.ambientGain);
       noiseSource.start();
 
-      // Soft distant railway track rhythm every 1.55s
-      this.pulseInterval = window.setInterval(() => {
-        if (
-          this.isMuted ||
-          this.bgmMode !== 'synth' ||
-          !this.ctx ||
-          !this.ambientGain ||
-          this.ctx.state !== 'running'
-        ) {
-          return;
-        }
-        const now = this.ctx.currentTime;
-        const triggerClick = (offset: number, freq: number) => {
-          if (!this.ctx || !this.ambientGain) return;
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, now + offset);
-          osc.frequency.exponentialRampToValueAtTime(36, now + offset + 0.09);
-          gain.gain.setValueAtTime(0.0001, now + offset);
-          gain.gain.linearRampToValueAtTime(0.24, now + offset + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
-          osc.connect(gain);
-          gain.connect(this.ambientGain);
-          osc.start(now + offset);
-          osc.stop(now + offset + 0.12);
-        };
-        triggerClick(0, 74);
-        triggerClick(0.22, 62);
-      }, 1550);
-
       this.synthAmbientRunning = true;
       this.bgmMode = 'synth';
+      this.startSynthPulseTimer();
     });
   }
 
   public startAmbient(): void {
     this.bgmWanted = true;
-    if (this.isMuted || typeof window === 'undefined') return;
+    if (this.isMuted || isPageInBackground() || typeof window === 'undefined') return;
 
-    // Synchronously ensure AudioContext & iOS playback session are active during user gesture
-    this.configureAudioSession();
+    this.configureAudioSession('playback');
     this.ensureIOSPlaybackChannel();
     this.ensureContext();
 
     const bgmFile = PUBLIC_ASSETS.audio.bgmOldMountainLine;
 
-    // Already playing MP3 BGM
     if (this.bgmMode === 'mp3' && this.bgmAudio) {
       if (this.bgmAudio.paused) {
         this.bgmAudio.play().catch(() => {});
@@ -546,13 +610,11 @@ class ExhibitionSoundEngine {
       return;
     }
 
-    // Confirmed missing MP3 -> start synth ambient immediately
     if (this.fileStatus.get(bgmFile) === 'missing') {
       this.startSynthAmbient();
       return;
     }
 
-    // Try real MP3 ambient loop first
     if (!this.bgmAudio) {
       const audio = new Audio(resolvePublicAsset(`audio/${bgmFile}`));
       audio.loop = true;
@@ -567,7 +629,7 @@ class ExhibitionSoundEngine {
         () => {
           this.fileStatus.set(bgmFile, 'missing');
           this.bgmAudio = null;
-          if (!this.isMuted && this.bgmWanted) {
+          if (!this.isMuted && this.bgmWanted && !isPageInBackground()) {
             this.startSynthAmbient();
           }
         },
@@ -609,12 +671,12 @@ class ExhibitionSoundEngine {
       this.bgmAudio.muted = muted;
       if (muted) {
         this.bgmAudio.pause();
-      } else if (this.bgmWanted) {
+      } else if (this.bgmWanted && !isPageInBackground()) {
         this.bgmAudio.play().catch(() => {});
       }
     }
 
-    if (!muted) {
+    if (!muted && !isPageInBackground()) {
       this.unlock();
       if (this.bgmMode === 'idle') {
         this.startAmbient();
@@ -682,12 +744,11 @@ class ExhibitionSoundEngine {
   }
 
   public playTicketDispense(): void {
-    if (this.isMuted) return;
+    if (this.isMuted || isPageInBackground()) return;
     this.unlock();
     this.runWithRunningContext((ctx, masterGain) => {
       const now = ctx.currentTime;
 
-      // Mechanical stepper sound sequence
       [0, 0.12, 0.24, 0.38, 0.56].forEach((offset, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -712,7 +773,7 @@ class ExhibitionSoundEngine {
     this.playMp3OrFallback(PUBLIC_ASSETS.audio.sfxTrainWhistle, 0.75, (ctx, masterGain) => {
       const now = ctx.currentTime;
 
-      const frequencies = [587.33, 739.99]; // D5 + F#5 chord
+      const frequencies = [587.33, 739.99];
       frequencies.forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -739,7 +800,6 @@ class ExhibitionSoundEngine {
     this.playMp3OrFallback(PUBLIC_ASSETS.audio.sfxDaterStamp, 0.8, (ctx, masterGain) => {
       const now = ctx.currentTime;
 
-      // Part 1: Metallic slide/clank
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'sawtooth';
@@ -755,7 +815,6 @@ class ExhibitionSoundEngine {
       osc1.start(now);
       osc1.stop(now + 0.1);
 
-      // Part 2: Heavy steel punch stamp thud
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'triangle';
@@ -778,7 +837,6 @@ class ExhibitionSoundEngine {
     this.playMp3OrFallback(PUBLIC_ASSETS.audio.sfxBlockBell, 0.75, (ctx, masterGain) => {
       const now = ctx.currentTime;
 
-      // Classic Webb & Thompson railway block bell: 2 clear brass rings
       [0, 0.18].forEach((offset) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -799,25 +857,39 @@ class ExhibitionSoundEngine {
   }
 
   public dispose(): void {
-    if (typeof window !== 'undefined' && this.boundUnlockHandler) {
-      window.removeEventListener('touchend', this.boundUnlockHandler, true);
-      window.removeEventListener('click', this.boundUnlockHandler, true);
-      window.removeEventListener('keydown', this.boundUnlockHandler, true);
-      this.boundUnlockHandler = null;
+    if (typeof window !== 'undefined') {
+      if (this.boundUnlockHandler) {
+        window.removeEventListener('touchend', this.boundUnlockHandler, true);
+        window.removeEventListener('click', this.boundUnlockHandler, true);
+        window.removeEventListener('keydown', this.boundUnlockHandler, true);
+        this.boundUnlockHandler = null;
+      }
+      if (this.boundPageHideHandler) {
+        window.removeEventListener('pagehide', this.boundPageHideHandler);
+        this.boundPageHideHandler = null;
+      }
+      if (this.boundPageShowHandler) {
+        window.removeEventListener('pageshow', this.boundPageShowHandler);
+        this.boundPageShowHandler = null;
+      }
     }
-    if (typeof document !== 'undefined' && this.boundVisibilityHandler) {
-      document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
-      this.boundVisibilityHandler = null;
+    if (typeof document !== 'undefined') {
+      if (this.boundVisibilityHandler) {
+        document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+        document.removeEventListener('freeze', this.boundVisibilityHandler);
+        this.boundVisibilityHandler = null;
+      }
     }
-    if (this.pulseInterval !== null) {
-      clearInterval(this.pulseInterval);
-      this.pulseInterval = null;
-    }
+    this.stopSynthPulseTimer();
     this.pauseIOSPlaybackChannel();
     this.iosUnmuteAudio = null;
     if (this.bgmAudio) {
       this.bgmAudio.pause();
       this.bgmAudio = null;
+    }
+    if (this.ctx && this.ctx.state !== 'closed') {
+      this.ctx.close().catch(() => {});
+      this.ctx = null;
     }
   }
 }

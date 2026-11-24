@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Check, Download, RotateCcw, X } from 'lucide-react';
-import { PUBLIC_ASSETS, useResolvedImage } from '../utils/assetResolver';
+import { useResolvedImage } from '../utils/assetResolver';
 import { soundEngine } from '../utils/soundEngine';
 
 interface TicketDaterModalProps {
@@ -11,12 +11,30 @@ interface TicketDaterModalProps {
   onOpenTicketMachine?: () => void;
 }
 
+// Reserved custom vertical Edmondson railway ticket artwork (/public/images/ticket.png or .jpg)
+const CUSTOM_VERTICAL_TICKET_ASSET = '/images/ticket.png';
+
 export function TicketDaterModal({
   isOpen,
   onClose,
   hasTicket = true,
   onOpenTicketMachine,
 }: TicketDaterModalProps) {
+  // Local failsafe so clicking X / backdrop / Escape ALWAYS dismisses immediately,
+  // even if parent history.back() stalls inside an iframe or tab switch.
+  const [forceClosed, setForceClosed] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setForceClosed(false);
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setForceClosed(true);
+    onClose();
+  };
+
   // Date options: 1998.09.23 (ROC 87.09.23) vs Today's ROC date
   const [selectedDateType, setSelectedDateType] = useState<'historical' | 'today'>('historical');
 
@@ -25,43 +43,55 @@ export function TicketDaterModal({
   const [isStamped, setIsStamped] = useState(false);
   const [stampFeedback, setStampFeedback] = useState<string | null>(null);
 
-  // Canvas Ref
+  // Canvas & Timer Refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    return () => {
+      if (pressTimerRef.current !== null) {
+        window.clearTimeout(pressTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || forceClosed) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        setForceClosed(true);
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, forceClosed, onClose]);
 
-  // Auto-resolved custom artwork (scene_sx_dater.png or .jpg) if uploaded
-  const { resolvedUrl: daterArtworkUrl } = useResolvedImage(PUBLIC_ASSETS.images.sceneSxDater);
-  const [loadedArtwork, setLoadedArtwork] = useState<HTMLImageElement | null>(null);
+  // Auto-resolved custom vertical ticket artwork (public/images/ticket.png or .jpg)
+  const { resolvedUrl: customTicketUrl } = useResolvedImage(CUSTOM_VERTICAL_TICKET_ASSET);
+  const [loadedTicketArtwork, setLoadedTicketArtwork] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (!daterArtworkUrl) {
-      setLoadedArtwork(null);
+    if (!customTicketUrl) {
+      setLoadedTicketArtwork(null);
       return;
     }
     let cancelled = false;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      if (!cancelled) setLoadedArtwork(img);
+      if (!cancelled) setLoadedTicketArtwork(img);
     };
     img.onerror = () => {
-      if (!cancelled) setLoadedArtwork(null);
+      if (!cancelled) setLoadedTicketArtwork(null);
     };
-    img.src = daterArtworkUrl;
+    img.src = customTicketUrl;
     return () => {
       cancelled = true;
     };
-  }, [daterArtworkUrl]);
+  }, [customTicketUrl]);
 
-  // Compute Today's ROC Date string (e.g. 115.11.20)
+  // Compute Today's ROC Date string (e.g. 115.11.24)
   const todayRocDate = (() => {
     const now = new Date();
     const rocYear = now.getFullYear() - 1911;
@@ -71,37 +101,38 @@ export function TicketDaterModal({
   })();
 
   const activeDateString = selectedDateType === 'historical' ? '87.09.23' : todayRocDate;
-  const activeDateDisplay =
-    selectedDateType === 'historical'
-      ? '87.09.23'
-      : `${todayRocDate} `;
+  const activeDateDisplay = selectedDateType === 'historical' ? '87.09.23' : todayRocDate;
 
-  // Draw Ticket onto Canvas whenever date or stamped state changes
+  // Draw Vertical Edmondson Ticket (480 x 800) onto Canvas whenever date or stamped state changes
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || forceClosed) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = 800;
-    const height = 480;
+    // Vertical old-style TRA Edmondson ticket dimensions (480 x 800)
+    const width = 480;
+    const height = 800;
     canvas.width = width;
     canvas.height = height;
 
-    if (loadedArtwork) {
-      // Draw uploaded scene_sx_dater.png / .jpg artwork scaled cleanly to fill 800x480
+    if (loadedTicketArtwork) {
+      // Draw custom vertical /images/ticket.png scaled cleanly to fill 480x800
       ctx.fillStyle = '#F8F5EC';
       ctx.fillRect(0, 0, width, height);
-      const scale = Math.max(width / loadedArtwork.width, height / loadedArtwork.height);
-      const drawW = loadedArtwork.width * scale;
-      const drawH = loadedArtwork.height * scale;
+      const scale = Math.max(
+        width / loadedTicketArtwork.width,
+        height / loadedTicketArtwork.height
+      );
+      const drawW = loadedTicketArtwork.width * scale;
+      const drawH = loadedTicketArtwork.height * scale;
       const offsetX = (width - drawW) / 2;
       const offsetY = (height - drawH) / 2;
-      ctx.drawImage(loadedArtwork, offsetX, offsetY, drawW, drawH);
+      ctx.drawImage(loadedTicketArtwork, offsetX, offsetY, drawW, drawH);
     } else {
-      // 1. Cardboard Background (Vintage Ivory #F7F4EB)
+      // Fallback vertical Edmondson cardboard ticket layout (before /images/ticket.png is uploaded)
       ctx.fillStyle = '#F8F5EC';
       ctx.fillRect(0, 0, width, height);
 
@@ -116,164 +147,126 @@ export function TicketDaterModal({
       // Outer card border
       ctx.strokeStyle = '#26221F';
       ctx.lineWidth = 3;
-      ctx.strokeRect(8, 8, width - 16, height - 16);
+      ctx.strokeRect(10, 10, width - 20, height - 20);
 
       // Thin inner hairline
-      ctx.strokeStyle = 'rgba(12, 12, 12, 0.2)';
+      ctx.strokeStyle = 'rgba(12, 12, 12, 0.22)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(16, 16, width - 32, height - 32);
+      ctx.strokeRect(18, 18, width - 36, height - 36);
 
-      // 2. Top Juguang Orange Double Stripes
+      // Top Juguang Orange Double Stripes
       ctx.fillStyle = '#F05E1C';
-      ctx.fillRect(16, 16, width - 32, 28);
+      ctx.fillRect(18, 18, width - 36, 30);
       ctx.fillStyle = '#FFBA84';
-      ctx.fillRect(16, 44, width - 32, 10);
+      ctx.fillRect(18, 48, width - 36, 10);
 
-      // 3. Header Typography
+      // Header Typography
       ctx.fillStyle = '#0C0C0C';
-      ctx.font = '600 24px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.font = '600 22px "Cactus Classical Serif", "Noto Serif TC", serif';
       ctx.textAlign = 'center';
-      ctx.fillText('臺灣鐵路管理局 · 莒光號特等客車', width / 2, 92);
+      ctx.fillText('臺灣鐵路管理局', width / 2, 102);
 
-      // Dotted separator line
+      ctx.fillStyle = '#F05E1C';
+      ctx.font = '700 20px "IBM Plex Mono", monospace';
+      ctx.fillText('167 次 · 莒光號', width / 2, 136);
+
+      // Dotted separator
       ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.moveTo(40, 112);
-      ctx.lineTo(width - 40, 112);
+      ctx.moveTo(40, 158);
+      ctx.lineTo(width - 40, 158);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 4. Ticket Serial & Code
-      ctx.font = '500 16px "IBM Plex Mono", monospace';
+      // Serial & Route
+      ctx.font = '500 14px "IBM Plex Mono", monospace';
       ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(12, 12, 12, 0.7)';
-      ctx.fillText('NO. 980923-167', 48, 142);
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
+      ctx.fillText('NO. 980923-167', 42, 186);
       ctx.textAlign = 'right';
-      ctx.fillText('山線單程票', width - 48, 142);
+      ctx.fillText('經由舊山線', width - 42, 186);
 
-      // 5. Origin & Destination Section
       // Origin: 台北
-      ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
-      ctx.font = '500 16px "Noto Serif TC", serif';
-      ctx.fillText('起站', 70, 185);
-      ctx.fillStyle = '#0C0C0C';
-      ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
-      ctx.fillText('台北', 70, 248);
-
-      // Center Train Info
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#F05E1C';
-      ctx.font = '700 24px "IBM Plex Mono", monospace';
-      ctx.fillText('167 次 莒光', width / 2, 205);
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.5)';
+      ctx.font = '500 15px "Noto Serif TC", serif';
+      ctx.fillText('起站', width / 2, 234);
+      ctx.fillStyle = '#0C0C0C';
+      ctx.font = '700 62px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.fillText('台北', width / 2, 302);
 
+      // Vertical arrow
       ctx.strokeStyle = '#0C0C0C';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(width / 2 - 80, 222);
-      ctx.lineTo(width / 2 + 80, 222);
+      ctx.moveTo(width / 2, 324);
+      ctx.lineTo(width / 2, 378);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(width / 2 - 7, 368);
+      ctx.lineTo(width / 2, 378);
+      ctx.lineTo(width / 2 + 7, 368);
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(12, 12, 12, 0.75)';
-      ctx.font = '500 17px "Noto Serif TC", serif';
-      ctx.fillText('經由舊山線（縱貫線）', width / 2, 248);
-
       // Destination: 勝興
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(12, 12, 12, 0.55)';
-      ctx.font = '500 16px "Noto Serif TC", serif';
-      ctx.fillText('迄站', width - 70, 185);
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.5)';
+      ctx.font = '500 15px "Noto Serif TC", serif';
+      ctx.fillText('迄站', width / 2, 412);
       ctx.fillStyle = '#0C0C0C';
-      ctx.font = '700 58px "Cactus Classical Serif", "Noto Serif TC", serif';
-      ctx.fillText('勝興', width - 70, 248);
+      ctx.font = '700 62px "Cactus Classical Serif", "Noto Serif TC", serif';
+      ctx.fillText('勝興', width / 2, 480);
 
-      // Dotted separator line
+      // Dotted separator
       ctx.strokeStyle = 'rgba(12, 12, 12, 0.35)';
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.moveTo(40, 280);
-      ctx.lineTo(width - 40, 280);
+      ctx.moveTo(40, 514);
+      ctx.lineTo(width - 40, 514);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 6. Ticket Fare & Conditions
-      ctx.textAlign = 'left';
+      // Fare & Elevation info
       ctx.fillStyle = '#0C0C0C';
-      ctx.font = '600 20px "Noto Serif TC", serif';
-      ctx.fillText('全票 1 張 · 票價 NT$ 238 元', 48, 316);
+      ctx.font = '600 18px "Noto Serif TC", serif';
+      ctx.fillText('全票 1 張 · NT$ 238 元', width / 2, 552);
 
-      ctx.fillStyle = 'rgba(12, 12, 12, 0.65)';
-      ctx.font = '400 15px "Noto Serif TC", serif';
-      ctx.fillText('限當日當次車有效 · 標高 402.326m 縱貫鐵路最高點紀念', 48, 344);
+      ctx.fillStyle = 'rgba(12, 12, 12, 0.6)';
+      ctx.font = '400 13px "Noto Serif TC", serif';
+      ctx.fillText('限當日當次車有效 · 舊山線紀念硬票', width / 2, 580);
     }
 
-    // 7. If Stamped, Render Ink Stamp Date & Station Seal
+    // Stamp Overlay (only the steel date stamp, no red station cancellation seal)
     if (isStamped) {
-      // Save canvas state for rotated stamped elements
-      ctx.save();
-
       // --- Ink Stamped Date (軋日機鋼印油墨效果) ---
-      // Authentic TRA Edmondson tickets had the date stamped at top right or bottom left in purple/black steel ink
-      ctx.translate(140, 410);
-      ctx.rotate(-0.02); // Slightly authentic human tilt
+      ctx.save();
+      ctx.translate(width / 2, 650);
+      ctx.rotate(-0.015);
 
-      // Deep vintage purple-black ink
       ctx.fillStyle = '#231834';
-      ctx.font = '700 36px "IBM Plex Mono", "Courier New", monospace';
-      ctx.textAlign = 'left';
+      ctx.font = '700 32px "IBM Plex Mono", "Courier New", monospace';
+      ctx.textAlign = 'center';
 
-      // Slight ink bleed shadow
       ctx.shadowColor = 'rgba(40, 20, 60, 0.35)';
       ctx.shadowBlur = 2;
       ctx.shadowOffsetX = 0.5;
       ctx.shadowOffsetY = 0.5;
 
-      // Render dots matrix steel stamp look
       ctx.fillText(`- ${activeDateString} -`, 0, 0);
-
-      ctx.restore();
-
-      // --- Red Station Cancellation Seal (勝興站剪票章) ---
-      ctx.save();
-      ctx.translate(width - 150, 365);
-      ctx.rotate(0.04);
-
-      ctx.strokeStyle = '#B32418';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 56, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(0, 0, 50, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#B32418';
-      ctx.font = '700 15px "Cactus Classical Serif", "Noto Serif TC", serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('勝興車站', 0, -22);
-
-      ctx.font = '700 13px "IBM Plex Mono", monospace';
-      ctx.fillText(activeDateString, 0, 2);
-
-      ctx.font = '600 15px "Cactus Classical Serif", "Noto Serif TC", serif';
-      ctx.fillText('剪票訖', 0, 26);
-
       ctx.restore();
     } else {
       // Placeholder dashed stamp zone indicating where date will be stamped
       ctx.save();
-      ctx.strokeStyle = 'rgba(240, 94, 28, 0.4)';
+      ctx.strokeStyle = 'rgba(240, 94, 28, 0.45)';
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(100, 375, 260, 50);
-      ctx.fillStyle = 'rgba(240, 94, 28, 0.7)';
-      ctx.font = '400 15px "Noto Serif TC", serif';
+      ctx.strokeRect(width / 2 - 125, 616, 250, 48);
+      ctx.fillStyle = 'rgba(240, 94, 28, 0.78)';
+      ctx.font = '400 14px "Noto Serif TC", serif';
       ctx.textAlign = 'center';
-      ctx.fillText('【軋日機油墨壓印處】', 230, 406);
+      ctx.fillText('【軋日機油墨壓印處】', width / 2, 645);
       ctx.restore();
     }
-  }, [isOpen, selectedDateType, isStamped, activeDateString, loadedArtwork]);
+  }, [isOpen, forceClosed, selectedDateType, isStamped, activeDateString, loadedTicketArtwork]);
 
   // Execute heavy press stamping animation & audio
   const handleExecutePress = () => {
@@ -282,16 +275,20 @@ export function TicketDaterModal({
       return;
     }
     if (isPressing) return;
+
     setIsPressing(true);
+    setStampFeedback(null);
     soundEngine.playMechanicalStamp();
 
-    // Heavy lever downward compression animation
-    setTimeout(() => {
-      setIsStamped(true);
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+    }
+    pressTimerRef.current = window.setTimeout(() => {
       setIsPressing(false);
-      setStampFeedback('✓ 軋日完成！復古鋼印油墨已烙印至車票，可立即下載紀念卡。');
-      setTimeout(() => setStampFeedback(null), 3500);
-    }, 600);
+      setIsStamped(true);
+      setStampFeedback(`已完成「${activeDateString}」鋼印壓印，可於下方下載紀念車票！`);
+      pressTimerRef.current = null;
+    }, 420);
   };
 
   // Download Generated Ticket PNG
@@ -302,7 +299,7 @@ export function TicketDaterModal({
     soundEngine.playSelectClick();
 
     const link = document.createElement('a');
-    link.download = `167次勝興_莒光號紀念車票_${activeDateString}.png`;
+    link.download = `167次-勝興_舊山線線上策展紀念車票_${activeDateString}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
@@ -314,7 +311,7 @@ export function TicketDaterModal({
     setStampFeedback(null);
   };
 
-  if (!isOpen || typeof document === 'undefined') return null;
+  if (!isOpen || forceClosed || typeof document === 'undefined') return null;
 
   return createPortal(
     <div
@@ -322,7 +319,7 @@ export function TicketDaterModal({
       aria-modal="true"
       aria-labelledby="dater-modal-title"
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-[#0C0C0C]/85 backdrop-blur-xs animate-stage-fade-in"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#0B346E] shadow-2xl"
@@ -337,7 +334,6 @@ export function TicketDaterModal({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono tracking-[0.16em] text-[#0B346E]">
               <span>勝興車站 日期壓印</span>
-              <span aria-hidden="true"></span>
             </div>
             <h2
               id="dater-modal-title"
@@ -349,7 +345,7 @@ export function TicketDaterModal({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="關閉軋日儀式"
             className="shrink-0 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2] hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/20 cursor-pointer"
           >
@@ -358,7 +354,6 @@ export function TicketDaterModal({
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-8 py-5 sm:py-6">
-
           {/* Operation Guide */}
           <p className="text-sm leading-[1.8] text-[#0C0C0C]/80">
             昔日台鐵車站售票窗口均設有厚重的生鐵軋日機。售票員將硬紙卡車票插入機口、重重一壓，鋼字輪便會將出票日期以深紫色油墨深深壓印在票面上。請於下方選擇要壓印的歷史日期或今日日期：
@@ -376,6 +371,7 @@ export function TicketDaterModal({
                   type="button"
                   onClick={() => {
                     soundEngine.playSelectClick();
+                    setForceClosed(true);
                     onOpenTicketMachine();
                   }}
                   className="shrink-0 self-start sm:self-center px-3 py-1.5 bg-[#0B346E] hover:bg-[#F05E1C] text-[#FCFAF2] text-xs tracking-[0.08em] transition-colors cursor-pointer whitespace-nowrap"
@@ -399,6 +395,7 @@ export function TicketDaterModal({
                 onClick={() => {
                   setSelectedDateType('historical');
                   setIsStamped(false);
+                  setStampFeedback(null);
                   soundEngine.playSelectClick();
                 }}
                 className={`min-h-[40px] px-4 py-1.5 text-xs sm:text-sm tracking-[0.08em] transition-colors cursor-pointer border ${
@@ -414,6 +411,7 @@ export function TicketDaterModal({
                 onClick={() => {
                   setSelectedDateType('today');
                   setIsStamped(false);
+                  setStampFeedback(null);
                   soundEngine.playSelectClick();
                 }}
                 className={`min-h-[40px] px-4 py-1.5 text-xs sm:text-sm tracking-[0.08em] transition-colors cursor-pointer border ${
@@ -483,26 +481,26 @@ export function TicketDaterModal({
             </div>
           )}
 
-          {/* Canvas Ticket Container with Mechanical Press Animation */}
+          {/* Vertical Edmondson Ticket Canvas Container (預留 /images/ticket.png 直式車票位置) */}
           <div className="mt-6 flex flex-col items-center">
             <div
-              className={`w-full max-w-xl transition-transform duration-300 ${
+              className={`w-full max-w-[270px] sm:max-w-[300px] transition-transform duration-300 ${
                 isPressing ? 'scale-[0.98] translate-y-2' : ''
               }`}
             >
               <canvas
                 ref={canvasRef}
-                className="w-full h-auto aspect-[800/480] shadow-[0_12px_32px_rgba(12,12,12,0.25)] border border-[#0C0C0C]/30 bg-[#F8F5EC]"
+                className="w-full h-auto aspect-[480/800] shadow-[0_12px_32px_rgba(12,12,12,0.25)] border border-[#0C0C0C]/30 bg-[#F8F5EC]"
               />
             </div>
           </div>
 
-          {/* UNLOCKED: Juguang Orange (#F05E1C) "一鍵保存專屬車票圖片" PNG Download Button */}
+          {/* UNLOCKED: Juguang Orange (#F05E1C) "下載紀念車票" PNG Download Button */}
           <div className="mt-8 pt-6 border-t border-[#0C0C0C]/15 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-xs text-[#0C0C0C]/70 text-center sm:text-left">
               {isStamped ? (
                 <span className="text-[#0B346E] font-medium">
-                  ✓ 車票已成功壓印專屬鋼印與勝興站剪票訖戳章。
+                  ✓ 您的車票已成功壓印
                 </span>
               ) : (
                 <span>點擊上方「壓印」，即可下載紀念車票。</span>

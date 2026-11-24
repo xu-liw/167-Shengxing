@@ -17,7 +17,6 @@ export default function App() {
   const [route, setRoute] = useState<AppRoute>(INITIAL_ROUTE);
   const routeRef = useRef<AppRoute>(route);
   routeRef.current = route;
-  const closingModalRef = useRef(false);
 
   const [prologueRunId, setPrologueRunId] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -41,7 +40,6 @@ export default function App() {
     window.history.replaceState({ route: INITIAL_ROUTE }, '', cleanUrl);
 
     const handlePopState = (event: PopStateEvent) => {
-      closingModalRef.current = false;
       const next = isValidRoute(event.state?.route) ? event.state.route : INITIAL_ROUTE;
       const prev = routeRef.current;
 
@@ -173,19 +171,11 @@ export default function App() {
     [navigateTo]
   );
 
+  // Directly clear modalId synchronously so X / 返回地圖 / backdrop never stall in iframes or rapid clicks
   const handleCloseMapModal = useCallback(() => {
     const current = routeRef.current;
-    if (!current.modalId || closingModalRef.current) return;
-
-    // If modal was opened via pushState from the map, pop it so Back/Forward stays clean
-    if (typeof window !== 'undefined' && window.history.state?.fromModal) {
-      closingModalRef.current = true;
-      window.history.back();
-      return;
-    }
-
-    // Direct-URL entry fallback: replace URL back to #/explore without leaving the site
-    navigateTo({ stage: 'main', tab: 'explore', modalId: null }, { replace: true });
+    if (!current.modalId) return;
+    navigateTo({ stage: 'main', tab: current.tab, modalId: null }, { replace: true });
   }, [navigateTo]);
 
   const handleToggleMute = useCallback(() => {
