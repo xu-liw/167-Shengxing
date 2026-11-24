@@ -195,10 +195,16 @@ export function ExhibitionMain({
                             />
                           </div>
 
-                          {/* 中間：編號與名稱 */}
+                          {/* 中間：編號、里程與名稱 */}
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-[#F05E1C]">
                               <span>{orderLabel}</span>
+                              {plate.kmMark && (
+                                <>
+                                  <span className="text-[#0C0C0C]/25">·</span>
+                                  <span className="font-semibold">{plate.kmMark}</span>
+                                </>
+                              )}
                             </div>
                             <h2 className="mt-0.5 text-lg sm:text-xl tracking-[0.1em] font-normal text-[#0C0C0C] truncate">
                               {plate.title}

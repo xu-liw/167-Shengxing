@@ -73,8 +73,8 @@ export function TicketDaterModal({
   const activeDateString = selectedDateType === 'historical' ? '87.09.23' : todayRocDate;
   const activeDateDisplay =
     selectedDateType === 'historical'
-      ? '87.09.23（末班車行駛夜）'
-      : `今日日期（${todayRocDate} 參訪紀念）`;
+      ? '87.09.23'
+      : `${todayRocDate} `;
 
   // Draw Ticket onto Canvas whenever date or stamped state changes
   useEffect(() => {
@@ -336,15 +336,14 @@ export function TicketDaterModal({
         <div className="shrink-0 flex items-start justify-between gap-3 px-5 sm:px-8 pt-4 pb-3 border-b border-[#0C0C0C]/15 bg-[#FCFAF2]">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono tracking-[0.16em] text-[#0B346E]">
-              <span>勝興車站 站務儀式</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-[#F05E1C]">名片式車票壓印</span>
+              <span>勝興車站 日期壓印</span>
+              <span aria-hidden="true"></span>
             </div>
             <h2
               id="dater-modal-title"
               className="mt-1 text-xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
             >
-              台鐵鑄鐵軋日機 · 壓印儀式
+              台鐵鑄鐵軋日機
             </h2>
           </div>
 
@@ -369,7 +368,7 @@ export function TicketDaterModal({
           {!hasTicket && (
             <div className="mt-3 p-3.5 bg-[#FFBA84]/18 border-l-3 border-[#F05E1C] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs leading-[1.75] text-[#0C0C0C]/85">
               <p>
-                <span className="font-semibold text-[#F05E1C]">小提示：</span>
+                <span className="font-semibold text-[#F05E1C]">提示：</span>
                 您尚未在「自動售票機」完成購票取得車票，因此目前無法使用軋日機壓印日期。請先回到售票機完成操作，即可回來體驗壓印喔！
               </p>
               {onOpenTicketMachine && (
@@ -391,7 +390,7 @@ export function TicketDaterModal({
           <div className="mt-5 p-3 bg-[#0B346E]/5 border border-[#0B346E]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-semibold tracking-[0.14em] text-[#0B346E] flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-[#F05E1C]" aria-hidden="true" />
-              <span>選擇壓印鋼印日期：</span>
+              <span>選擇壓印日期：</span>
             </span>
 
             <div className="flex items-center gap-2">
@@ -431,7 +430,7 @@ export function TicketDaterModal({
           {/* Interactive Mechanical Press Trigger */}
           <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs text-[#0C0C0C]/65">
-              <span>當前設定日期：</span>
+              <span>指定日期：</span>
               <span className="font-mono font-bold text-[#F05E1C] ml-1">
                 {activeDateDisplay}
               </span>
@@ -467,10 +466,10 @@ export function TicketDaterModal({
                   {!hasTicket
                     ? '請先至售票機購票'
                     : isPressing
-                      ? '壓印重擊中⋯⋯'
+                      ? '壓印中⋯⋯'
                       : isStamped
-                        ? '重新壓印鋼字'
-                        : '執行重壓壓印'}
+                        ? '重新壓印'
+                        : '壓印'}
                 </span>
               </button>
             </div>
@@ -506,7 +505,7 @@ export function TicketDaterModal({
                   ✓ 車票已成功壓印專屬鋼印與勝興站剪票訖戳章。
                 </span>
               ) : (
-                <span>請先點擊上方「執行重壓壓印」，即可解鎖高畫質紀念車票下載。</span>
+                <span>點擊上方「壓印」，即可下載紀念車票。</span>
               )}
             </div>
 
@@ -522,7 +521,7 @@ export function TicketDaterModal({
                 }`}
               >
                 <Download className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span>一鍵保存專屬車票圖片</span>
+                <span>下載紀念車票</span>
               </button>
             </div>
           </div>

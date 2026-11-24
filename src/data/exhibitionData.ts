@@ -34,10 +34,9 @@ export interface MapObject {
   id: string;
   name: string;
   shortName: string;
+  subtitle?: string;
   type: MapObjectType;
-  kmMark: string;
-  elevation: number;
-  elevationStr: string;
+  kmMark?: string;
   isFocal?: boolean;
   isCenter?: boolean;
   hasStory?: boolean;
@@ -84,7 +83,6 @@ export interface StationStop {
   order: string;
   name: string;
   kmMark: string;
-  elevation: string;
   time167: string;
   summary: string;
   detail: string;
@@ -95,6 +93,8 @@ export interface StationStop {
 export interface ArchivePlate {
   id: string;
   title: string;
+  subtitle?: string;
+  kmMark?: string;
   thumbnail?: string;
   image: string;
   fallbackImage?: string;

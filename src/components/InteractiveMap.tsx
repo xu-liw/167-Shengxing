@@ -161,6 +161,7 @@ export function InteractiveMap({
   const lastScrollProgressRef = useRef<number>(0.36);
   const ignoreDirectionScrollRef = useRef<boolean>(true);
   const ignoreDirectionTimerRef = useRef<number | null>(null);
+  const isUserInteractingRef = useRef<boolean>(false);
 
   // First-time onboarding fade-in / fade-out guide dialog (also toggleable via '?' icon)
   const [onboardingPhase, setOnboardingPhase] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>(
@@ -319,6 +320,12 @@ export function InteractiveMap({
   useEffect(() => {
     setShowNorthHint(true);
     setShowSouthHint(true);
+    ignoreDirectionScrollRef.current = true;
+    isUserInteractingRef.current = false;
+
+    if (introHintTimerRef.current !== null) {
+      window.clearTimeout(introHintTimerRef.current);
+    }
     introHintTimerRef.current = window.setTimeout(() => {
       setShowNorthHint(false);
       setShowSouthHint(false);
@@ -345,6 +352,7 @@ export function InteractiveMap({
 
       const shengxingT = 0.36;
       ignoreDirectionScrollRef.current = true;
+      isUserInteractingRef.current = false;
       if (ignoreDirectionTimerRef.current !== null) {
         window.clearTimeout(ignoreDirectionTimerRef.current);
       }
@@ -373,7 +381,7 @@ export function InteractiveMap({
           ignoreDirectionScrollRef.current = false;
           ignoreDirectionTimerRef.current = null;
         },
-        smooth ? 650 : 180
+        smooth ? 750 : 500
       );
     },
     [isLandscape, syncTrainDomPosition]
@@ -394,12 +402,33 @@ export function InteractiveMap({
     return () => window.removeEventListener('center-shengxing', handleCenterEvent);
   }, [centerOnShengxing]);
 
-  // Handle mouse wheel horizontal scroll in landscape mode & re-enable directional hints on user input
+  // Handle mouse wheel horizontal scroll in landscape mode & mark active user touch/wheel input
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const handleUserScrollIntent = () => {
+    const markUserInteracting = () => {
+      isUserInteractingRef.current = true;
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      markUserInteracting();
+      if (hasInitializedScrollRef.current && ignoreDirectionScrollRef.current) {
+        ignoreDirectionScrollRef.current = false;
+        if (ignoreDirectionTimerRef.current !== null) {
+          window.clearTimeout(ignoreDirectionTimerRef.current);
+          ignoreDirectionTimerRef.current = null;
+        }
+      }
+      if (!isLandscape) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY * 1.15;
+      }
+    };
+
+    const handleTouchMove = () => {
+      markUserInteracting();
       if (hasInitializedScrollRef.current && ignoreDirectionScrollRef.current) {
         ignoreDirectionScrollRef.current = false;
         if (ignoreDirectionTimerRef.current !== null) {
@@ -409,20 +438,11 @@ export function InteractiveMap({
       }
     };
 
-    const handleWheel = (e: WheelEvent) => {
-      handleUserScrollIntent();
-      if (!isLandscape) return;
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        container.scrollLeft += e.deltaY * 1.15;
-      }
-    };
-
     container.addEventListener('wheel', handleWheel, { passive: false });
-    container.addEventListener('touchstart', handleUserScrollIntent, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
     return () => {
       container.removeEventListener('wheel', handleWheel);
-      container.removeEventListener('touchstart', handleUserScrollIntent);
+      container.removeEventListener('touchmove', handleTouchMove);
     };
   }, [isLandscape]);
 
@@ -444,9 +464,13 @@ export function InteractiveMap({
     setCurrentDistanceKm(getDistanceKmAtProgress(clampedT));
 
     // Directional hints: moving south reveals North (三義); moving north reveals South (豐原)
-    if (hasInitializedScrollRef.current && !ignoreDirectionScrollRef.current) {
+    // Ignore programmatic/browser layout shifts until user actually scrolls beyond threshold
+    if (
+      hasInitializedScrollRef.current &&
+      (!ignoreDirectionScrollRef.current || isUserInteractingRef.current)
+    ) {
       const delta = clampedT - lastScrollProgressRef.current;
-      if (Math.abs(delta) > 0.002) {
+      if (Math.abs(delta) > 0.003) {
         if (introHintTimerRef.current !== null) {
           window.clearTimeout(introHintTimerRef.current);
           introHintTimerRef.current = null;
@@ -487,6 +511,7 @@ export function InteractiveMap({
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    isUserInteractingRef.current = true;
     // Re-enable directional hints immediately when user starts dragging the map
     if (hasInitializedScrollRef.current && ignoreDirectionScrollRef.current) {
       ignoreDirectionScrollRef.current = false;
@@ -1094,7 +1119,7 @@ export function InteractiveMap({
                     </div>
                   )}
 
-{/* --- ①–⑤ 各站站牌（可點擊開啟彈窗 · sign_*.png / .jpg） --- */}
+                  {/* --- ①–⑤ 各站站牌（可點擊開啟彈窗 · sign_*.png / .jpg） --- */}
                   {isSignpost ? (
                     <div
                       className="w-[88px] sm:w-[104px] shrink-0 flex flex-col items-center select-none drop-shadow-md"

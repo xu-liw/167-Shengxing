@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, Footprints, MapPin, X } from 'lucide-react';
+import { BookOpen, Footprints, X } from 'lucide-react';
 import { MapObject } from '../data/exhibitionData';
 import { ResilientImage } from './ResilientImage';
 
@@ -10,16 +10,36 @@ interface StoryCardModalProps {
 }
 
 export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
+  // Local failsafe so clicking X / 返回地圖 / backdrop / Escape ALWAYS dismisses immediately,
+  // even if parent history.back() fails or stalls inside an iframe / tab switch.
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!object) return;
+    setDismissedId(null);
+  }, [object?.id]);
+
+  const handleClose = () => {
+    if (object) {
+      setDismissedId(object.id);
+    }
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!object || dismissedId === object.id) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (object) setDismissedId(object.id);
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [object, onClose]);
+  }, [object, dismissedId, onClose]);
 
-  if (!object || typeof document === 'undefined') return null;
+  if (!object || dismissedId === object.id || typeof document === 'undefined') {
+    return null;
+  }
 
   return createPortal(
     <div
@@ -27,7 +47,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
       aria-modal="true"
       aria-labelledby="story-modal-title"
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-[#0C0C0C]/80 backdrop-blur-xs animate-stage-fade-in"
-      onClick={onClose}
+      onClick={handleClose}
     >
       {/* #FFBA84 Warm Apricot Framed Card Modal */}
       <div
@@ -41,16 +61,14 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
         {/* Always-Accessible Modal Top Bar with Close Button */}
         <div className="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-8 pt-4 pb-3 border-b border-[#0C0C0C]/15 bg-[#FCFAF2]">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono tabular-nums text-[#0C0C0C]/70 min-w-0">
-            <span className="text-[#F05E1C] font-semibold">{object.kmMark}</span>
-            <span aria-hidden="true" className="text-[#0C0C0C]/30">·</span>
-            <span>海拔 {object.elevationStr}</span>
-            <span aria-hidden="true" className="hidden sm:inline text-[#0C0C0C]/30">·</span>
-            <span className="hidden sm:inline font-serif text-[#0B346E]">舊山線文史導覽</span>
+            {object.kmMark && (
+              <span className="text-[#F05E1C] font-semibold">{object.kmMark}</span>
+            )}
           </div>
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="關閉故事視窗"
             className="shrink-0 inline-flex items-center justify-center min-h-[40px] min-w-[40px] bg-[#FCFAF2] hover:bg-[#FFBA84]/30 text-[#0C0C0C] hover:text-[#F05E1C] transition-colors border border-[#0C0C0C]/20 cursor-pointer"
           >
@@ -60,13 +78,18 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
 
         {/* Smoothly Scrollable Modal Body */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-8 py-5 sm:py-6">
-          {/* Title */}
+          {/* Title & Subtitle */}
           <h2
             id="story-modal-title"
             className="text-2xl sm:text-3xl font-serif tracking-[0.12em] text-[#0C0C0C] font-normal"
           >
             {object.name}
           </h2>
+          {object.subtitle && (
+            <p className="mt-1.5 text-sm sm:text-base tracking-[0.14em] text-[#F05E1C] font-medium">
+              {object.subtitle}
+            </p>
+          )}
 
           {/* 4:3 Image Container with Resilient Fallback */}
           <div className="mt-4 sm:mt-5 aspect-[4/3] w-full overflow-hidden border border-[#0C0C0C]/15 bg-[#1C1A18] shadow-sm relative">
@@ -76,7 +99,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
               alt={object.imageAlt || object.name}
               className="w-full h-full object-cover"
               fallbackTitle={object.name}
-              fallbackSubtitle={`舊山線 · ${object.elevationStr}`}
+              fallbackSubtitle={object.kmMark || ''}
             />
             {/* Subtle vintage photo corner vignette */}
             <div
@@ -91,9 +114,6 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
 
           {/* Story Narrative (故事內文) */}
           <div className="mt-5 sm:mt-6 space-y-3.5">
-            <p className="text-base sm:text-[17px] font-medium leading-[1.8] text-[#0C0C0C]">
-              {object.summary}
-            </p>
             <p className="text-sm sm:text-base leading-[1.9] text-[#0C0C0C]/85">
               {object.story || object.detail}
             </p>
@@ -104,7 +124,7 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
             <div className="mt-6 p-4 bg-[#FFBA84]/15 border-l-3 border-[#F05E1C] rounded-none">
               <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-[#F05E1C]">
                 <Footprints className="w-4 h-4" aria-hidden="true" />
-                <span>現代散步提示 · 現場走讀筆記</span>
+                <span>現代散步提示</span>
               </div>
               <p className="mt-2 text-xs sm:text-sm leading-[1.8] text-[#0C0C0C]/85">
                 {object.walkingTip}
@@ -124,14 +144,10 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
           )}
 
           {/* Bottom Action Footer */}
-          <div className="mt-6 pt-4 border-t border-[#0C0C0C]/10 flex items-center justify-between text-xs">
-            <span className="text-[#0C0C0C]/50 flex items-center gap-1 font-mono">
-              <MapPin className="w-3 h-3 text-[#F05E1C]" aria-hidden="true" />
-              <span>苗栗與台中界嶺舊鐵道</span>
-            </span>
+          <div className="mt-6 pt-4 border-t border-[#0C0C0C]/10 flex items-center justify-end text-xs">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="min-h-[38px] px-5 py-1.5 bg-[#0C0C0C] text-[#FCFAF2] hover:bg-[#F05E1C] transition-colors cursor-pointer tracking-[0.1em]"
             >
               返回地圖
