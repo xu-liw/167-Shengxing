@@ -1094,16 +1094,16 @@ export function InteractiveMap({
                     </div>
                   )}
 
-                  {/* --- ①–⑤ 各站站牌（可點擊開啟彈窗 · sign_*.png / .jpg） --- */}
+{/* --- ①–⑤ 各站站牌（可點擊開啟彈窗 · sign_*.png / .jpg） --- */}
                   {isSignpost ? (
                     <div
-                      className="flex flex-col items-center select-none drop-shadow-md"
+                      className="w-[88px] sm:w-[104px] shrink-0 flex flex-col items-center select-none drop-shadow-md"
                       title={`${obj.name}（點擊閱讀介紹）`}
                     >
                       <MapIconImage
                         iconFile={obj.mapIcon}
                         alt={obj.name}
-                        className="w-18 h-auto sm:w-22 object-contain drop-shadow-[0_3px_10px_rgba(0,0,0,0.8)]"
+                        className="w-[88px] sm:w-[104px] h-auto max-w-none shrink-0 object-contain drop-shadow-[0_3px_10px_rgba(0,0,0,0.8)]"
                         fallback={
                           <>
                             <div className="bg-[#FCFAF2] border-2 border-[#0B346E] px-2.5 py-1 text-center min-w-[60px] shadow-md">
