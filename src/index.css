@@ -10,24 +10,128 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ================= 主題色票變數（預設深色模式） ================= */
+:root {
+  --theme-bg: #12100E;
+  --theme-bg-rgb: 18 16 14;
+  --theme-ink: #FCFAF2;
+  --theme-ink-rgb: 252 250 242;
+  --theme-tra-blue: #7CB3F8;
+  --theme-tra-blue-rgb: 124 179 248;
+  color-scheme: dark;
+}
+
+html.light-theme {
+  --theme-bg: #FCFAF2;
+  --theme-bg-rgb: 252 250 242;
+  --theme-ink: #0C0C0C;
+  --theme-ink-rgb: 12 12 12;
+  --theme-tra-blue: #0B346E;
+  --theme-tra-blue-rgb: 11 52 110;
+  color-scheme: light;
+}
+
 @layer base {
   html {
     font-family: var(--font-serif);
     scroll-behavior: smooth;
     background-color: #0C0C0C;
-    color: #0C0C0C;
+    color: var(--theme-ink);
   }
 
   body {
     font-family: var(--font-serif);
     margin: 0;
     overflow-x: hidden;
+    background-color: #0C0C0C;
+    color: var(--theme-ink);
   }
 
   ::selection {
     background-color: #F05E1C;
     color: #FCFAF2;
   }
+}
+
+/* ================= 語意色彩自動適應層（標記 .theme-adaptive 的區塊隨日夜模式切換） ================= */
+.theme-adaptive {
+  background-color: var(--theme-bg);
+  color: var(--theme-ink);
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* 米白底自動切換（深色時為夜黑 #12100E，淺色時為米白 #FCFAF2） */
+.theme-adaptive.bg-\[\#FCFAF2\],
+.theme-adaptive .bg-\[\#FCFAF2\] {
+  background-color: var(--theme-bg) !important;
+}
+
+.theme-adaptive.bg-\[\#FCFAF2\]\/95,
+.theme-adaptive .bg-\[\#FCFAF2\]\/95 {
+  background-color: rgb(var(--theme-bg-rgb) / 0.95) !important;
+}
+
+/* 墨黑字自動切換（深色時為米白 #FCFAF2，淺色時為墨黑 #0C0C0C） */
+.theme-adaptive.text-\[\#0C0C0C\],
+.theme-adaptive .text-\[\#0C0C0C\] {
+  color: var(--theme-ink) !important;
+}
+
+.theme-adaptive .text-\[\#0C0C0C\]\/85 { color: rgb(var(--theme-ink-rgb) / 0.85) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/80 { color: rgb(var(--theme-ink-rgb) / 0.80) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/75 { color: rgb(var(--theme-ink-rgb) / 0.75) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/70 { color: rgb(var(--theme-ink-rgb) / 0.70) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/65 { color: rgb(var(--theme-ink-rgb) / 0.65) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/60 { color: rgb(var(--theme-ink-rgb) / 0.60) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/55 { color: rgb(var(--theme-ink-rgb) / 0.55) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/50 { color: rgb(var(--theme-ink-rgb) / 0.50) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/45 { color: rgb(var(--theme-ink-rgb) / 0.45) !important; }
+.theme-adaptive .text-\[\#0C0C0C\]\/40 { color: rgb(var(--theme-ink-rgb) / 0.40) !important; }
+.theme-adaptive .placeholder\:text-\[\#0C0C0C\]\/40::placeholder {
+  color: rgb(var(--theme-ink-rgb) / 0.40) !important;
+}
+
+/* 框線與微透明底色自動切換 */
+.theme-adaptive .border-\[\#0C0C0C\] { border-color: var(--theme-ink) !important; }
+.theme-adaptive .border-\[\#0C0C0C\]\/30 { border-color: rgb(var(--theme-ink-rgb) / 0.30) !important; }
+.theme-adaptive .border-\[\#0C0C0C\]\/25 { border-color: rgb(var(--theme-ink-rgb) / 0.25) !important; }
+.theme-adaptive .border-\[\#0C0C0C\]\/20 { border-color: rgb(var(--theme-ink-rgb) / 0.20) !important; }
+.theme-adaptive .border-\[\#0C0C0C\]\/15 { border-color: rgb(var(--theme-ink-rgb) / 0.15) !important; }
+.theme-adaptive.border-\[\#0C0C0C\]\/12,
+.theme-adaptive .border-\[\#0C0C0C\]\/12 { border-color: rgb(var(--theme-ink-rgb) / 0.12) !important; }
+.theme-adaptive .border-\[\#0C0C0C\]\/10 { border-color: rgb(var(--theme-ink-rgb) / 0.10) !important; }
+.theme-adaptive .divide-\[\#0C0C0C\]\/12 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--theme-ink-rgb) / 0.12) !important;
+}
+
+.theme-adaptive .bg-\[\#0C0C0C\]\/5 { background-color: rgb(var(--theme-ink-rgb) / 0.06) !important; }
+.theme-adaptive .bg-\[\#0C0C0C\]\/20 { background-color: rgb(var(--theme-ink-rgb) / 0.14) !important; }
+.theme-adaptive .bg-\[\#0C0C0C\]\/25 { background-color: rgb(var(--theme-ink-rgb) / 0.16) !important; }
+
+/* 反白深色按鈕（如「返回地圖」、「壓印」預設態）在深色模式下轉為亮框按鈕保持高對比（僅限 button，不影響 footer） */
+.theme-adaptive button.bg-\[\#0C0C0C\] {
+  background-color: #24201C !important;
+  color: #FCFAF2 !important;
+  border: 1px solid rgba(252, 250, 242, 0.28);
+}
+html.light-theme .theme-adaptive button.bg-\[\#0C0C0C\] {
+  background-color: #0C0C0C !important;
+  color: #FCFAF2 !important;
+  border-color: transparent;
+}
+.theme-adaptive button.bg-\[\#0C0C0C\]:hover {
+  background-color: #F05E1C !important;
+  border-color: #F05E1C !important;
+  color: #FCFAF2 !important;
+}
+.theme-adaptive footer.bg-\[\#0C0C0C\] {
+  background-color: #0C0C0C !important;
+  color: #FCFAF2 !important;
+}
+
+/* 台鐵藍文字在深色底下自動提亮為清晰天藍 */
+.theme-adaptive .text-\[\#0B346E\] {
+  color: var(--theme-tra-blue) !important;
 }
 
 /* Vertical writing utility for Prologue */

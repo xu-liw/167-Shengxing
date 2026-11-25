@@ -51,9 +51,10 @@ export function StoryCardModal({ object, onClose }: StoryCardModalProps) {
     >
       {/* #FFBA84 Warm Apricot Framed Card Modal */}
       <div
-        className="relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#FFBA84] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
-        onClick={(e) => e.stopPropagation()}
-      >
+  className="theme-adaptive relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#FFBA84] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+  onClick={(e) => e.stopPropagation()}
+>
+
         {/* Top Apricot & Juguang Dual Accent Stripe */}
         <div className="h-2.5 bg-[#FFBA84] shrink-0" />
         <div className="h-1 bg-[#F05E1C] shrink-0" />

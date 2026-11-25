@@ -1,6 +1,9 @@
-import { useEffect } from 'react';
-import { Menu, RotateCcw, Ticket, Volume2, VolumeX, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Menu, Moon, RotateCcw, Sun, Ticket, Volume2, VolumeX, X } from 'lucide-react';
 import { ExhibitionTabId, NAV_ITEMS } from '../data/exhibitionData';
+import { soundEngine } from '../utils/soundEngine';
+
+const THEME_STORAGE_KEY = 'shengxing-167-theme';
 
 interface TopNavbarProps {
   activeTab: ExhibitionTabId;
@@ -27,6 +30,38 @@ export function TopNavbar({
   onOpenTicketMachine,
   shouldNudgeMenu = false,
 }: TopNavbarProps) {
+  // 預設為深色模式（dark），並從 localStorage 讀取使用者先前偏好
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    try {
+      const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // Ignore storage access restrictions
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light-theme');
+    } else {
+      root.classList.remove('light-theme');
+    }
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Ignore
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    soundEngine.playSelectClick();
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   useEffect(() => {
     if (!isMenuOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -45,7 +80,7 @@ export function TopNavbar({
   return (
     <>
       {/* Fixed 3-Zone Top Navigation Bar */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-[#FCFAF2]/95 backdrop-blur-sm border-b border-[#0C0C0C]/12">
+      <header className="theme-adaptive fixed top-0 left-0 right-0 z-40 h-16 bg-[#FCFAF2]/95 backdrop-blur-sm border-b border-[#0C0C0C]/12">
         <div className="max-w-[1240px] h-full mx-auto px-4 sm:px-8 grid grid-cols-3 items-center">
           {/* Left Zone: Hamburger Menu Button (with top-right orange dot hint after 1 minute) */}
           <div className="relative flex items-center justify-start">
@@ -94,17 +129,35 @@ export function TopNavbar({
             </button>
           </div>
 
-          {/* Right Zone: Mute Toggle Button */}
-          <div className="flex items-center justify-end">
+          {/* Right Zone: Theme Toggle (Dark/Light) & Mute Toggle */}
+          <div className="flex items-center justify-end gap-1 sm:gap-2">
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              aria-pressed={theme === 'light'}
+              aria-label={theme === 'dark' ? '切換為淺色模式' : '切換為深色模式'}
+              title={theme === 'dark' ? '切換為淺色模式' : '切換為深色模式'}
+              className="inline-flex items-center gap-1.5 min-h-[44px] min-w-[44px] justify-center sm:justify-end px-2 text-[#0C0C0C] hover:text-[#F05E1C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <span className="hidden md:inline text-sm tracking-[0.14em]">
+                {theme === 'dark' ? '深色' : '淺色'}
+              </span>
+              {theme === 'dark' ? (
+                <Moon className="w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 text-[#FFBA84]" aria-hidden="true" />
+              ) : (
+                <Sun className="w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 text-[#F05E1C]" aria-hidden="true" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={onToggleMute}
               aria-pressed={isMuted}
               aria-label={isMuted ? '開啟環境音' : '靜音'}
-              className="inline-flex items-center gap-2 min-h-[44px] min-w-[44px] justify-end px-2 -mr-2 text-[#0C0C0C] hover:text-[#F05E1C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-2 min-h-[44px] min-w-[44px] justify-center sm:justify-end px-2 -mr-2 text-[#0C0C0C] hover:text-[#F05E1C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F05E1C] transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               <span className="hidden sm:inline text-sm tracking-[0.14em]">
-                {isMuted ? '已靜音' : '環境音'}
+                {isMuted ? '靜音' : '音效'}
               </span>
               {isMuted ? (
                 <VolumeX className="w-5 h-5 shrink-0 text-[#0C0C0C]/55" aria-hidden="true" />
@@ -193,7 +246,7 @@ export function TopNavbar({
 
         {/* Bottom Drawer Utilities: Replay Intro / Ticket Machine */}
         <div className="pt-6 border-t border-[#FCFAF2]/15 space-y-2">
-          <p className="text-[11px] tracking-[0.18em] text-[#FCFAF2]/45 mb-2">重溫進站序曲</p>
+          <p className="text-[11px] tracking-[0.18em] text-[#FCFAF2]/45 mb-2">重溫序曲</p>
           <div className="flex items-center gap-3">
             <button
               type="button"

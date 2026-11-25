@@ -322,9 +322,10 @@ export function TicketDaterModal({
       onClick={handleClose}
     >
       <div
-        className="relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#0B346E] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+  className="theme-adaptive relative flex flex-col bg-[#FCFAF2] text-[#0C0C0C] w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] overflow-hidden border-3 border-[#0B346E] shadow-2xl"
+  onClick={(e) => e.stopPropagation()}
+>
+
         {/* Top Juguang Orange Double Stripe */}
         <div className="h-3 bg-[#F05E1C] shrink-0" />
         <div className="h-1.5 bg-[#FFBA84] shrink-0" />

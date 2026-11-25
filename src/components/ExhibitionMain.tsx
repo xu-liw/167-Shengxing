@@ -68,10 +68,11 @@ export function ExhibitionMain({
 
   return (
     <div
-      className={`bg-[#FCFAF2] text-[#0C0C0C] pt-16 flex flex-col animate-stage-fade-in ${
-        activeTab === 'explore' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'
-      }`}
-    >
+  className={`theme-adaptive bg-[#FCFAF2] text-[#0C0C0C] pt-16 flex flex-col animate-stage-fade-in ${
+    activeTab === 'explore' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'
+  }`}
+>
+
       {/* Main Content Area */}
       <main
         className={`flex-1 ${
