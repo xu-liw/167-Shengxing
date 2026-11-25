@@ -39,13 +39,13 @@ export function getDocumentTitle(route: AppRoute): string {
   }
   switch (route.tab) {
     case 'explore':
-      return '01. 探索舊山線｜167次-勝興';
+      return '探索舊山線｜167次-勝興';
     case 'archive':
-      return '02. 沿線圖鑑｜167次-勝興';
+      return '沿線圖鑑｜167次-勝興';
     case 'about':
-      return '03. 關於本展｜167次-勝興';
+      return '關於本展｜167次-勝興';
     case 'links':
-      return '04. 勝興連結｜167次-勝興';
+      return '勝興連結｜167次-勝興';
     default:
       return '167次-勝興｜「回憶舊山線」線上展覽';
   }
