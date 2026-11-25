@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { ExhibitionMain } from './components/ExhibitionMain';
 import { PrologueStage } from './components/PrologueStage';
 import { TicketMachineStage } from './components/TicketMachineStage';
 import { TopNavbar } from './components/TopNavbar';
-import { ExhibitionTabId } from './data/exhibitionData';
+import { ExhibitionTabId, MAINTENANCE_MODE } from './data/exhibitionData';
 import {
   AppRoute,
   getDocumentTitle,
@@ -14,6 +15,14 @@ import {
 import { soundEngine } from './utils/soundEngine';
 
 export default function App() {
+  // 網址加上 ?preview=1 可在維護期間繞過公告直接預覽全站
+  const isBypassPreview =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('preview') === '1';
+
+  const isUnderMaintenance = Boolean(MAINTENANCE_MODE) && !isBypassPreview;
+  const [showMaintenanceAbout, setShowMaintenanceAbout] = useState(false);
+
   const [route, setRoute] = useState<AppRoute>(INITIAL_ROUTE);
   const routeRef = useRef<AppRoute>(route);
   routeRef.current = route;
@@ -29,12 +38,16 @@ export default function App() {
 
   // Sync browser document title whenever route changes
   useEffect(() => {
+    if (isUnderMaintenance) {
+      document.title = '展覽調整中｜《167次-勝興》「回憶舊山線」線上展覽';
+      return;
+    }
     document.title = getDocumentTitle(route);
-  }, [route]);
+  }, [route, isUnderMaintenance]);
 
   // Anchor initial history entry at prologue & subscribe to browser Back / Forward (popstate)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isUnderMaintenance) return;
 
     const cleanUrl = `${window.location.pathname}${window.location.search}`;
     window.history.replaceState({ route: INITIAL_ROUTE }, '', cleanUrl);
@@ -62,11 +75,12 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
       soundEngine.dispose();
     };
-  }, []);
+  }, [isUnderMaintenance]);
 
   // After 1 minute from entering the website, show the orange dot on the menu icon
   // ONLY if the user has never clicked the menu or visited another tab within that first minute
   useEffect(() => {
+    if (isUnderMaintenance) return;
     if (hasClickedMenu) {
       if (nudgeTimerRef.current !== null) {
         window.clearTimeout(nudgeTimerRef.current);
@@ -89,7 +103,7 @@ export default function App() {
         nudgeTimerRef.current = null;
       }
     };
-  }, [hasClickedMenu]);
+  }, [hasClickedMenu, isUnderMaintenance]);
 
   // If user switches to any other exhibition tab (e.g. via footer), mark menu/tabs as explored
   useEffect(() => {
@@ -185,6 +199,73 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // ================= 隱藏的「展覽調整中」頁面（序幕同款夜黑極簡版） =================
+  if (isUnderMaintenance) {
+    if (showMaintenanceAbout) {
+      return (
+        <div className="min-h-screen bg-[#FCFAF2] text-[#0C0C0C]">
+          <header className="fixed top-0 inset-x-0 z-40 h-16 bg-[#0C0C0C] text-[#FCFAF2] border-b border-[#FCFAF2]/15">
+            <div className="max-w-[1240px] mx-auto px-5 sm:px-8 h-full flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMaintenanceAbout(false);
+                  window.scrollTo({ top: 0 });
+                }}
+                className="inline-flex items-center gap-2 text-xs sm:text-sm tracking-[0.16em] text-[#FFBA84] hover:text-[#FCFAF2] transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                <span>返回</span>
+              </button>
+              <span className="text-xs tracking-[0.2em] text-[#FCFAF2]/60">
+                167次<span className="text-[#F05E1C]">-</span>勝興
+              </span>
+            </div>
+          </header>
+
+          <ExhibitionMain
+            activeTab="about"
+            onSelectTab={() => {}}
+            onReplayPrologue={() => {}}
+            onOpenTicketMachine={() => {}}
+            hasTicket={false}
+            activeMapModalId={null}
+            onOpenMapModal={() => {}}
+            onCloseMapModal={() => {}}
+            maintenanceMode={true}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <main className="min-h-[100dvh] bg-[#0C0C0C] text-[#FCFAF2] flex flex-col items-center justify-center px-6 text-center select-none animate-stage-fade-in">
+        <div className="space-y-6">
+          <p className="text-xs sm:text-sm tracking-[0.28em] text-[#FFBA84]/85">
+            《167次<span className="text-[#F05E1C]">-</span>勝興》
+          </p>
+
+          <h1 className="text-2xl sm:text-4xl font-normal tracking-[0.24em] text-[#FCFAF2]">
+            展覽調整中
+          </h1>
+
+          <div className="pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMaintenanceAbout(true);
+                window.scrollTo({ top: 0 });
+              }}
+              className="min-h-[42px] px-7 py-2 border border-[#FCFAF2]/30 hover:border-[#F05E1C] text-xs sm:text-sm tracking-[0.2em] text-[#FCFAF2]/85 hover:text-[#FFBA84] transition-colors cursor-pointer"
+            >
+              關於本展
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0C0C0C] text-[#0C0C0C]">

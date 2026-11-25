@@ -502,7 +502,7 @@ export function ExhibitionMain({
 
             {/* Copyright Bottom Line */}
             <div className="pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs tracking-[0.1em] text-[#FCFAF2]/50">
-              <p>©2026《167次-勝興》舊山線地方主題線上策展團隊 All Rights Reserved.</p>
+              <p>©2026《167次-勝興》線上策展團隊 All Rights Reserved.</p>
             </div>
           </div>
         </footer>

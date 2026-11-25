@@ -1,6 +1,8 @@
 // 《167次-勝興》舊山線線上策展資料集
 // 嚴格對應 13 個核心物件（地圖互動物件與「02. 沿線圖鑑」完全同源、僅收錄此 13 項）
 // 圖片檔案上傳至 /public/images/ 後會自動套用，且同時支援 .png 與 .jpg 格式
+// 【展覽調整中模式總開關】true = 顯示「路線養護與展覽調整中」＋「關於本展」；false = 正常開放全站。（你的網址/?preview=1），就能繞過維護畫面
+export const MAINTENANCE_MODE = true;
 
 import shengxingNightImg from '../assets/images/shengxing_night_station_1795101028819.jpg';
 import longtengBridgeImg from '../assets/images/longteng_bridge_mist_1795101010969.jpg';
