@@ -364,7 +364,7 @@ export function TicketDaterModal({
             <div className="mt-3 p-3.5 bg-[#FFBA84]/18 border-l-3 border-[#F05E1C] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs leading-[1.75] text-[#0C0C0C]/85">
               <p>
                 <span className="font-semibold text-[#F05E1C]">提示：</span>
-                您尚未在「自動售票機」完成購票取得車票，因此目前無法使用軋日機壓印日期。請先回到售票機完成操作，即可回來體驗壓印喔！
+                請先回到售票機完成購票，再回來體驗壓印！
               </p>
               {onOpenTicketMachine && (
                 <button

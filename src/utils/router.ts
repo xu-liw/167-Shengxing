@@ -32,7 +32,7 @@ export function isSameRoute(a: AppRoute, b: AppRoute): boolean {
 
 export function getDocumentTitle(route: AppRoute): string {
   if (route.stage === 'prologue') {
-    return '167次-勝興｜舊山線地方主題線上策展';
+    return '167次-勝興｜「回憶舊山線」線上展覽';
   }
   if (route.stage === 'ticket-machine') {
     return '自動售票機｜167次-勝興';
@@ -47,6 +47,6 @@ export function getDocumentTitle(route: AppRoute): string {
     case 'links':
       return '04. 勝興連結｜167次-勝興';
     default:
-      return '167次-勝興｜舊山線地方主題線上策展';
+      return '167次-勝興｜「回憶舊山線」線上展覽';
   }
 }

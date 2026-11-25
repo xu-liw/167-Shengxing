@@ -138,7 +138,7 @@ export function TopNavbar({
           {/* Drawer Header */}
           <div className="flex items-center justify-between pb-5 border-b border-[#FCFAF2]/15">
             <div>
-              <p className="text-[11px] tracking-[0.2em] text-[#FFBA84]">舊山線地方主題線上策展</p>
+              <p className="text-[11px] tracking-[0.2em] text-[#FFBA84]">「回憶舊山線」線上展覽</p>
               <p className="text-lg tracking-[0.2em] mt-0.5 text-[#FCFAF2]">167次-勝興</p>
             </div>
             <button

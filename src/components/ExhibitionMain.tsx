@@ -317,7 +317,7 @@ export function ExhibitionMain({
                 當末班列車駛離勝興，記憶仍停留在 21:10
               </h1>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs tracking-[0.14em] text-[#0C0C0C]/60">
-                <span>舊山線地方主題線上策展</span>
+                <span>「回憶舊山線」線上展覽</span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums">2026.12.15</span>
               </div>
@@ -464,7 +464,7 @@ export function ExhibitionMain({
                   167次<span className="text-[#F05E1C]">-</span>勝興
                 </p>
                 <p className="mt-2 text-xs tracking-[0.16em] text-[#FFBA84]">
-                  舊山線地方主題線上策展
+                  「回憶舊山線」線上展覽
                 </p>
               </div>
 
